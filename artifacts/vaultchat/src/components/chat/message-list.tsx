@@ -2,7 +2,7 @@ import { useRef, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Message } from "@/hooks/use-messages";
 import { format } from "date-fns";
-import { Download, File as FileIcon, Image as ImageIcon } from "lucide-react";
+import { Download, File as FileIcon, Shield } from "lucide-react";
 import { API_BASE } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -128,6 +128,3 @@ export function MessageList({ messages }: MessageListProps) {
     </div>
   );
 }
-
-// Need to import Shield for empty state
-import { Shield } from "lucide-react";

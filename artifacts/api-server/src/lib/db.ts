@@ -48,4 +48,18 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_messages_room_id ON messages(room_id, id);
+
+  CREATE TABLE IF NOT EXISTS dms (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recipient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    content TEXT,
+    attachment_filename TEXT,
+    attachment_original_name TEXT,
+    attachment_mime_type TEXT,
+    attachment_size INTEGER,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_dms_pair ON dms(sender_id, recipient_id, id);
+  CREATE INDEX IF NOT EXISTS idx_dms_recipient ON dms(recipient_id, id);
 `);

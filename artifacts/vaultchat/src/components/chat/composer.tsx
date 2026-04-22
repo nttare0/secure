@@ -1,26 +1,32 @@
 import { useState, useRef } from "react";
 import { useSendMessage } from "@/hooks/use-messages";
+import { useSendDm } from "@/hooks/use-dms";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Send, Paperclip, X, Image as ImageIcon, File as FileIcon, Loader2, Shield } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+export type ComposerTarget =
+  | { type: "room"; id: number }
+  | { type: "dm"; userId: number };
+
 interface ComposerProps {
-  roomId: number;
+  target: ComposerTarget;
 }
 
-export function Composer({ roomId }: ComposerProps) {
+export function Composer({ target }: ComposerProps) {
   const [content, setContent] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  
+
   const sendMessage = useSendMessage();
+  const sendDm = useSendDm();
+  const isPending = target.type === "room" ? sendMessage.isPending : sendDm.isPending;
 
   const handleSend = () => {
     if (!content.trim() && !file) return;
-    
-    // Check file size (10MB)
+
     if (file && file.size > 10 * 1024 * 1024) {
       toast({
         title: "File too large",
@@ -29,8 +35,8 @@ export function Composer({ roomId }: ComposerProps) {
       });
       return;
     }
-    
-    sendMessage.mutate({ roomId, content: content.trim(), file: file || undefined }, {
+
+    const handlers = {
       onSuccess: () => {
         setContent("");
         setFile(null);
@@ -42,8 +48,20 @@ export function Composer({ roomId }: ComposerProps) {
           description: err.message,
           variant: "destructive",
         });
-      }
-    });
+      },
+    };
+
+    if (target.type === "room") {
+      sendMessage.mutate(
+        { roomId: target.id, content: content.trim(), file: file || undefined },
+        handlers,
+      );
+    } else {
+      sendDm.mutate(
+        { userId: target.userId, content: content.trim(), file: file || undefined },
+        handlers,
+      );
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -93,7 +111,7 @@ export function Composer({ roomId }: ComposerProps) {
           size="icon" 
           className="h-10 w-10 shrink-0 text-muted-foreground hover:text-foreground hover:bg-muted"
           onClick={() => fileInputRef.current?.click()}
-          disabled={sendMessage.isPending || !!file}
+          disabled={isPending || !!file}
         >
           <Paperclip className="h-5 w-5" />
         </Button>
@@ -104,7 +122,7 @@ export function Composer({ roomId }: ComposerProps) {
           onKeyDown={handleKeyDown}
           placeholder="Type a secure message..."
           className="min-h-[40px] max-h-[200px] resize-none border-0 bg-transparent focus-visible:ring-0 px-2 py-2.5 shadow-none"
-          disabled={sendMessage.isPending}
+          disabled={isPending}
           rows={1}
         />
         
@@ -112,10 +130,10 @@ export function Composer({ roomId }: ComposerProps) {
           type="button" 
           size="icon" 
           className="h-10 w-10 shrink-0 rounded-lg transition-all shadow-sm"
-          disabled={(!content.trim() && !file) || sendMessage.isPending}
+          disabled={(!content.trim() && !file) || isPending}
           onClick={handleSend}
         >
-          {sendMessage.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+          {isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
         </Button>
       </div>
       <div className="flex justify-between items-center mt-2 px-2">

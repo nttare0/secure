@@ -31,3 +31,12 @@ All errors return `{error: "message"}` with 4xx/5xx status.
 - Always pass `credentials: "include"` on fetch.
 - Poll `GET /api/rooms/:id/messages` every 2s for new messages (no websockets).
 - Show invite codes prominently so users can share them.
+
+## Direct Messages (DMs)
+- `GET /api/dms` — list active conversations: `[{ userId, username, lastMessageAt, lastMessage }]`
+- `GET /api/dms/users/search?q=foo` — search users (returns `[{ id, username }]`, max 10)
+- `GET /api/dms/:userId/messages?limit=50&before=ID` — `{ peer: { id, username }, messages: Message[] }`
+- `POST /api/dms/:userId/messages` — multipart, fields `content` and optional `file` (10MB max)
+
+## Auto-created starter room
+- On `POST /api/auth/register`, a personal room named `"<username>'s Room"` is auto-created with a unique invite code, and the new user is added as owner/member.

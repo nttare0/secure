@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
+import crypto from "node:crypto";
 import { db } from "../lib/db";
 import { requireAuth } from "../lib/auth";
 
@@ -9,6 +10,27 @@ interface UserRow {
   id: number;
   username: string;
   password_hash: string;
+}
+
+function generateRoomCode(): string {
+  return crypto.randomBytes(5).toString("base64url").slice(0, 8).toUpperCase();
+}
+
+function createStarterRoom(userId: number, username: string): void {
+  let code = generateRoomCode();
+  for (let i = 0; i < 5; i++) {
+    if (!db.prepare("SELECT 1 FROM rooms WHERE code = ?").get(code)) break;
+    code = generateRoomCode();
+  }
+  const now = Date.now();
+  const info = db
+    .prepare("INSERT INTO rooms (name, code, owner_id, created_at) VALUES (?, ?, ?, ?)")
+    .run(`${username}'s Room`, code, userId, now);
+  db.prepare("INSERT INTO room_members (room_id, user_id, joined_at) VALUES (?, ?, ?)").run(
+    Number(info.lastInsertRowid),
+    userId,
+    now,
+  );
 }
 
 router.post("/register", (req, res) => {
@@ -32,6 +54,7 @@ router.post("/register", (req, res) => {
     .prepare("INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)")
     .run(u, hash, Date.now());
   const userId = Number(info.lastInsertRowid);
+  createStarterRoom(userId, u);
   req.session.userId = userId;
   res.json({ user: { id: userId, username: u } });
 });
