@@ -4,6 +4,7 @@ import { useAuth, useLogout } from "@/hooks/use-auth";
 import { useRooms, useCreateRoom, useJoinRoom, Room } from "@/hooks/use-rooms";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { formatDistanceToNow } from "date-fns";
