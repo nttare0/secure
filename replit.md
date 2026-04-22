@@ -2,26 +2,22 @@
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+VaultChat — a private, secure chat platform with accounts, multi-room chat, invite codes, and file/image attachments. Data is stored locally in SQLite.
 
 ## Stack
 
 - **Monorepo tool**: pnpm workspaces
-- **Node.js version**: 24
-- **Package manager**: pnpm
-- **TypeScript version**: 5.9
-- **API framework**: Express 5
-- **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+- **Frontend**: React + Vite + Tailwind + shadcn/ui (artifact: `vaultchat`)
+- **Backend**: Express 5 (artifact: `api-server`)
+- **Database**: SQLite via `better-sqlite3` (file at `artifacts/api-server/data/vaultchat.db`)
+- **Auth**: bcrypt password hashes + `express-session` with a custom SQLite-backed store
+- **File uploads**: `multer` to `artifacts/api-server/data/uploads/` (10MB limit, access restricted to room members)
 
 ## Key Commands
 
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
+- `pnpm --filter @workspace/vaultchat run dev` — run web client locally
 
-See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.
+## API
+
+See `artifacts/vaultchat/API.md` for the full HTTP contract.
