@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { useSendMessage } from "@/hooks/use-messages";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Send, Paperclip, X, Image as ImageIcon, File as FileIcon, Loader2 } from "lucide-react";
+import { Send, Paperclip, X, Image as ImageIcon, File as FileIcon, Loader2, Shield } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface ComposerProps {
