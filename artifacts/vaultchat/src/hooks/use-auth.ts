@@ -5,6 +5,8 @@ export interface User {
   id: number;
   username: string;
   isAdmin?: boolean;
+  avatar?: { kind: string; value: string | null };
+  wallpaperId?: string | null;
 }
 
 export function useAuth() {

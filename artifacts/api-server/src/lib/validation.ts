@@ -82,6 +82,34 @@ export const editMessageSchema = z.object({
   content: z.string().trim().min(1, "Message cannot be empty").max(4000, "Message too long"),
 });
 
+export const wallpaperIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .regex(/^[A-Za-z0-9_-]+$/, "Invalid wallpaper id");
+
+export const avatarPresetIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(40)
+  .regex(/^[A-Za-z0-9_-]+$/, "Invalid avatar id");
+
+export const updateSettingsSchema = z
+  .object({
+    wallpaperId: z.union([wallpaperIdSchema, z.null()]).optional(),
+    avatar: z
+      .union([
+        z.object({ kind: z.literal("initials") }),
+        z.object({ kind: z.literal("preset"), id: avatarPresetIdSchema }),
+      ])
+      .optional(),
+  })
+  .refine((v) => v.wallpaperId !== undefined || v.avatar !== undefined, {
+    message: "Nothing to update",
+  });
+
 export function formatZodError(err: z.ZodError): string {
   return err.issues.map((i) => i.message).join("; ") || "Invalid input";
 }

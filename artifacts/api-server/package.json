@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@types/ws": "^8.18.1",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
     "bcryptjs": "^3.0.3",
@@ -25,6 +26,7 @@
     "pino": "^9",
     "pino-http": "^10",
     "sqlite3": "^6.0.1",
+    "ws": "^8.20.0",
     "zod": "catalog:"
   },
   "devDependencies": {

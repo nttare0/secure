@@ -9,6 +9,11 @@ import {
   registerSchema,
   validateBody,
 } from "../lib/validation";
+import {
+  clearAttempts,
+  lockoutGuard,
+  registerFailedAttempt,
+} from "../lib/login-lockout";
 
 const router: IRouter = Router();
 
@@ -66,36 +71,56 @@ router.post(
   },
 );
 
-router.post("/login", authLimiter, validateBody(credentialsSchema), (req, res) => {
-  const { username, password, rememberMe } = (req as any).validated as {
-    username: string;
-    password: string;
-    rememberMe: boolean;
-  };
-  const row = db
-    .prepare(
-      "SELECT id, username, password_hash, is_admin, is_disabled FROM users WHERE username = ?",
-    )
-    .get(username) as UserRow | undefined;
-  if (!row || !bcrypt.compareSync(password, row.password_hash)) {
-    return res.status(401).json({ error: "Invalid username or password" });
-  }
-  if (row.is_disabled) {
-    return res.status(403).json({ error: "This account has been disabled. Contact an administrator." });
-  }
-  req.session.regenerate((err) => {
-    if (err) return res.status(500).json({ error: "Could not start session" });
-    req.session.userId = row.id;
-    if (rememberMe === false) {
-      // Browser-session cookie (cleared when browser closes)
-      (req.session.cookie as unknown as { expires: false }).expires = false;
-      req.session.cookie.maxAge = undefined as unknown as number;
-    } else {
-      req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 30;
+router.post(
+  "/login",
+  authLimiter,
+  lockoutGuard,
+  validateBody(credentialsSchema),
+  (req, res) => {
+    const { username, password, rememberMe } = (req as any).validated as {
+      username: string;
+      password: string;
+      rememberMe: boolean;
+    };
+    const row = db
+      .prepare(
+        "SELECT id, username, password_hash, is_admin, is_disabled FROM users WHERE username = ?",
+      )
+      .get(username) as UserRow | undefined;
+    if (!row || !bcrypt.compareSync(password, row.password_hash)) {
+      const status = registerFailedAttempt(username);
+      if (status.locked) {
+        return res.status(429).json({
+          error:
+            "Too many failed attempts. Your account is locked for 3 minutes.",
+          lockedUntil: status.lockedUntil,
+          retryAfterMs: status.lockedUntil - Date.now(),
+        });
+      }
+      return res.status(401).json({
+        error: "Invalid username or password",
+        attemptsLeft: status.attemptsLeft,
+      });
     }
-    res.json({ user: { id: row.id, username: row.username, isAdmin: !!row.is_admin } });
-  });
-});
+    if (row.is_disabled) {
+      return res
+        .status(403)
+        .json({ error: "This account has been disabled. Contact an administrator." });
+    }
+    clearAttempts(username);
+    req.session.regenerate((err) => {
+      if (err) return res.status(500).json({ error: "Could not start session" });
+      req.session.userId = row.id;
+      if (rememberMe === false) {
+        (req.session.cookie as unknown as { expires: false }).expires = false;
+        req.session.cookie.maxAge = undefined as unknown as number;
+      } else {
+        req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 30;
+      }
+      res.json({ user: { id: row.id, username: row.username, isAdmin: !!row.is_admin } });
+    });
+  },
+);
 
 router.post("/logout", (req, res) => {
   req.session.destroy(() => {
@@ -106,15 +131,33 @@ router.post("/logout", (req, res) => {
 
 router.get("/me", requireAuth, (req, res) => {
   const row = db
-    .prepare("SELECT id, username, is_admin, is_disabled FROM users WHERE id = ?")
+    .prepare(
+      "SELECT id, username, is_admin, is_disabled, avatar_kind, avatar_value, wallpaper_id FROM users WHERE id = ?",
+    )
     .get(req.session.userId) as
-    | { id: number; username: string; is_admin: number; is_disabled: number }
+    | {
+        id: number;
+        username: string;
+        is_admin: number;
+        is_disabled: number;
+        avatar_kind: string;
+        avatar_value: string | null;
+        wallpaper_id: string | null;
+      }
     | undefined;
   if (!row || row.is_disabled) {
     req.session.destroy(() => undefined);
     return res.status(401).json({ error: "Not authenticated" });
   }
-  res.json({ user: { id: row.id, username: row.username, isAdmin: !!row.is_admin } });
+  res.json({
+    user: {
+      id: row.id,
+      username: row.username,
+      isAdmin: !!row.is_admin,
+      avatar: { kind: row.avatar_kind, value: row.avatar_value },
+      wallpaperId: row.wallpaper_id,
+    },
+  });
 });
 
 export default router;

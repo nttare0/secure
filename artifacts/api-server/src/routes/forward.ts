@@ -3,6 +3,7 @@ import { db } from "../lib/db";
 import { requireAuth } from "../lib/auth";
 import { writeLimiter } from "../lib/rate-limit";
 import { forwardSchema, validateBody } from "../lib/validation";
+import { emitToRoom, emitToDmPair } from "../lib/realtime";
 
 const router: IRouter = Router();
 
@@ -92,7 +93,7 @@ router.post(
             delivered.push({ type: t.type, id: t.id, ok: false, error: "Not a member" });
             continue;
           }
-          db.prepare(
+          const info = db.prepare(
             `INSERT INTO messages (room_id, user_id, content, attachment_filename,
                                    attachment_original_name, attachment_mime_type, attachment_size,
                                    created_at, forwarded_from_username)
@@ -108,6 +109,11 @@ router.post(
             now,
             originalAuthor,
           );
+          emitToRoom(t.id, {
+            type: "room:message:new",
+            roomId: t.id,
+            messageId: Number(info.lastInsertRowid),
+          });
         } else {
           if (t.id === userId) {
             delivered.push({ type: t.type, id: t.id, ok: false, error: "Cannot DM yourself" });
@@ -118,7 +124,7 @@ router.post(
             delivered.push({ type: t.type, id: t.id, ok: false, error: "User not found" });
             continue;
           }
-          db.prepare(
+          const info = db.prepare(
             `INSERT INTO dms (sender_id, recipient_id, content, attachment_filename,
                               attachment_original_name, attachment_mime_type, attachment_size,
                               created_at, forwarded_from_username)
@@ -134,6 +140,12 @@ router.post(
             now,
             originalAuthor,
           );
+          emitToDmPair(userId, t.id, {
+            type: "dm:message:new",
+            senderId: userId,
+            recipientId: t.id,
+            messageId: Number(info.lastInsertRowid),
+          });
         }
         delivered.push({ type: t.type, id: t.id, ok: true });
       } catch (err) {

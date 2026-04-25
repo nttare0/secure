@@ -1,6 +1,8 @@
+import http from "node:http";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { seedAdmin } from "./lib/admin-seed";
+import { attachRealtime } from "./lib/realtime";
 
 seedAdmin();
 
@@ -18,11 +20,17 @@ if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
+const server = http.createServer(app);
 
-  logger.info({ port }, "Server listening");
+const sessionSecret =
+  process.env.SESSION_SECRET ?? "dev-only-fallback-do-not-use-in-prod";
+attachRealtime(server, sessionSecret);
+
+server.listen(port, () => {
+  logger.info({ port }, "Server listening (HTTP + WebSocket)");
+});
+
+server.on("error", (err) => {
+  logger.error({ err }, "Server error");
+  process.exit(1);
 });

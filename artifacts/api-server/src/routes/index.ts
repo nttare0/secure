@@ -7,11 +7,13 @@ import uploadsRouter from "./uploads";
 import dmsRouter from "./dms";
 import adminRouter from "./admin";
 import forwardRouter from "./forward";
+import usersRouter from "./users";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use("/auth", authRouter);
+router.use("/users", usersRouter);
 router.use("/rooms", roomsRouter);
 router.use("/rooms", messagesRouter);
 router.use("/dms", dmsRouter);

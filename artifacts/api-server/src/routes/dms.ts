@@ -14,6 +14,7 @@ import {
   validateBody,
 } from "../lib/validation";
 import { maybeUnlinkAttachment } from "../lib/attachments";
+import { emitToDmPair } from "../lib/realtime";
 
 const router: IRouter = Router();
 
@@ -248,7 +249,14 @@ router.post(
     const row = db
       .prepare(`SELECT ${SELECT_DM_COLS} ${FROM_DM_JOINS} WHERE d.id = ?`)
       .get(Number(info.lastInsertRowid)) as DmRow;
-    res.json(serialize(row));
+    const payload = serialize(row);
+    emitToDmPair(userId, otherId, {
+      type: "dm:message:new",
+      senderId: userId,
+      recipientId: otherId,
+      message: payload,
+    });
+    res.json(payload);
   },
 );
 
@@ -282,7 +290,14 @@ router.patch(
     const updated = db
       .prepare(`SELECT ${SELECT_DM_COLS} ${FROM_DM_JOINS} WHERE d.id = ?`)
       .get(msgId) as DmRow;
-    res.json(serialize(updated));
+    const payload = serialize(updated);
+    emitToDmPair(userId, otherId, {
+      type: "dm:message:update",
+      senderId: userId,
+      recipientId: otherId,
+      message: payload,
+    });
+    res.json(payload);
   },
 );
 
@@ -308,6 +323,12 @@ router.delete("/:userId/messages/:msgId", requireAuth, writeLimiter, (req, res) 
   if (!inThread) return res.status(404).json({ error: "Not found" });
   db.prepare("DELETE FROM dms WHERE id = ?").run(msgId);
   maybeUnlinkAttachment(row.attachment_filename);
+  emitToDmPair(userId, otherId, {
+    type: "dm:message:delete",
+    senderId: userId,
+    recipientId: otherId,
+    messageId: msgId,
+  });
   res.json({ ok: true });
 });
 

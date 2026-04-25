@@ -88,6 +88,15 @@ if (!hasColumn("users", "is_disabled")) {
 if (!hasColumn("users", "last_seen_at")) {
   db.exec("ALTER TABLE users ADD COLUMN last_seen_at INTEGER;");
 }
+if (!hasColumn("users", "avatar_kind")) {
+  db.exec("ALTER TABLE users ADD COLUMN avatar_kind TEXT NOT NULL DEFAULT 'initials';");
+}
+if (!hasColumn("users", "avatar_value")) {
+  db.exec("ALTER TABLE users ADD COLUMN avatar_value TEXT;");
+}
+if (!hasColumn("users", "wallpaper_id")) {
+  db.exec("ALTER TABLE users ADD COLUMN wallpaper_id TEXT;");
+}
 for (const table of ["messages", "dms"] as const) {
   if (!hasColumn(table, "edited_at")) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN edited_at INTEGER;`);

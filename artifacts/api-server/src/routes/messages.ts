@@ -8,6 +8,7 @@ import { requireAuth } from "../lib/auth";
 import { writeLimiter } from "../lib/rate-limit";
 import { editMessageSchema, idParamSchema, messageContentSchema, validateBody } from "../lib/validation";
 import { maybeUnlinkAttachment } from "../lib/attachments";
+import { emitToRoom } from "../lib/realtime";
 
 const router: IRouter = Router();
 
@@ -198,7 +199,9 @@ router.post(
     const row = db
       .prepare(`SELECT ${SELECT_MESSAGE_COLS} ${FROM_MESSAGE_JOINS} WHERE m.id = ?`)
       .get(Number(info.lastInsertRowid)) as MessageRow;
-    res.json(serialize(row));
+    const payload = serialize(row);
+    emitToRoom(roomId, { type: "room:message:new", roomId, message: payload });
+    res.json(payload);
   },
 );
 
@@ -226,7 +229,9 @@ router.patch(
     const updated = db
       .prepare(`SELECT ${SELECT_MESSAGE_COLS} ${FROM_MESSAGE_JOINS} WHERE m.id = ?`)
       .get(msgId) as MessageRow;
-    res.json(serialize(updated));
+    const payload = serialize(updated);
+    emitToRoom(roomId, { type: "room:message:update", roomId, message: payload });
+    res.json(payload);
   },
 );
 
@@ -254,6 +259,7 @@ router.delete("/:id/messages/:msgId", requireAuth, writeLimiter, (req, res) => {
   }
   db.prepare("DELETE FROM messages WHERE id = ?").run(msgId);
   maybeUnlinkAttachment(row.attachment_filename);
+  emitToRoom(roomId, { type: "room:message:delete", roomId, messageId: msgId });
   res.json({ ok: true });
 });
 
