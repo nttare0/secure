@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuth, useLogin, useRegister } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -29,10 +29,9 @@ export default function Login() {
   const login = useLogin();
   const register = useRegister();
 
-  if (user) {
-    setLocation("/");
-    return null;
-  }
+  useEffect(() => {
+    if (user) setLocation("/");
+  }, [user, setLocation]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

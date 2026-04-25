@@ -5,6 +5,7 @@ import roomsRouter from "./rooms";
 import messagesRouter from "./messages";
 import uploadsRouter from "./uploads";
 import dmsRouter from "./dms";
+import adminRouter from "./admin";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use("/rooms", roomsRouter);
 router.use("/rooms", messagesRouter);
 router.use("/dms", dmsRouter);
 router.use("/uploads", uploadsRouter);
+router.use("/admin", adminRouter);
 
 export default router;

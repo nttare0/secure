@@ -1,5 +1,8 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { seedAdmin } from "./lib/admin-seed";
+
+seedAdmin();
 
 const rawPort = process.env["PORT"];
 

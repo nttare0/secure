@@ -4,6 +4,7 @@ import { fetchApi } from '../lib/api';
 export interface User {
   id: number;
   username: string;
+  isAdmin?: boolean;
 }
 
 export function useAuth() {

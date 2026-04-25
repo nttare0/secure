@@ -20,6 +20,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatDistanceToNow } from "date-fns";
 import {
   Shield,
+  ShieldCheck,
   Plus,
   Hash,
   LogOut,
@@ -29,6 +30,7 @@ import {
   Search,
   X,
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -375,24 +377,51 @@ export function Sidebar({ selection, onSelect, isOpen, onClose }: SidebarProps) 
         </Dialog>
       </div>
 
-      <div className="p-3 border-t border-border/50 shrink-0 flex items-center justify-between">
+      <div className="p-3 border-t border-border/50 shrink-0 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 overflow-hidden">
           <div className="h-9 w-9 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center font-medium shrink-0">
             {user?.username.charAt(0).toUpperCase()}
           </div>
           <div className="truncate">
-            <span className="text-sm font-medium block truncate">{user?.username}</span>
-            <span className="text-xs text-muted-foreground block truncate">Secure connection</span>
+            <span className="text-sm font-medium block truncate flex items-center gap-1.5">
+              {user?.username}
+              {user?.isAdmin && <ShieldCheck className="h-3.5 w-3.5 text-amber-500" />}
+            </span>
+            <span className="text-xs text-muted-foreground block truncate">
+              {user?.isAdmin ? "Administrator" : "Secure connection"}
+            </span>
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleLogout}
-          className="shrink-0 text-muted-foreground hover:text-destructive"
-        >
-          <LogOut className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1 shrink-0">
+          {user?.isAdmin && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <a href="/admin">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label="Admin console"
+                  >
+                    <ShieldCheck className="h-4 w-4" />
+                  </Button>
+                </a>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Admin console</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleLogout}
+            className="text-muted-foreground hover:text-destructive"
+            aria-label="Sign out"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </div>
   );

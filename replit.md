@@ -16,6 +16,7 @@ VaultChat — a private, secure chat platform with accounts, multi-room chat, in
 - **Rate limiting**: `express-rate-limit` — 5/15min on login, 5/hr on register, 30/min on writes, 10/min on room actions, 120/min generally
 - **Security headers**: `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy`; secure cookie + 100kb body limit; `SESSION_SECRET` required from env in production
 - **T&C**: `/terms` page on the web client; registration requires `acceptedTerms: true` (enforced server-side in `registerSchema`)
+- **Admin**: `users` table has `is_admin` and `is_disabled` flags. On first server startup an admin is auto-seeded — username comes from `ADMIN_USERNAME` (default `admin`); password from `ADMIN_PASSWORD` if set, otherwise a random one is generated and written to `data/admin-credentials.txt`. Disabled accounts cannot log in. Admin endpoints live under `/api/admin/*` (list users, view a user's rooms/messages/DMs, disable/enable, delete user, delete a single message or DM). Admins cannot disable, delete, or demote each other. The web client exposes `/admin` (gated by `user.isAdmin`) with a sidebar shortcut.
 
 ## Responsive UI
 

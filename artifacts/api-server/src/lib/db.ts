@@ -18,7 +18,9 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE COLLATE NOCASE,
     password_hash TEXT NOT NULL,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    is_admin INTEGER NOT NULL DEFAULT 0,
+    is_disabled INTEGER NOT NULL DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS rooms (
@@ -63,3 +65,14 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_dms_pair ON dms(sender_id, recipient_id, id);
   CREATE INDEX IF NOT EXISTS idx_dms_recipient ON dms(recipient_id, id);
 `);
+
+function hasColumn(table: string, column: string): boolean {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  return rows.some((r) => r.name === column);
+}
+if (!hasColumn("users", "is_admin")) {
+  db.exec("ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0;");
+}
+if (!hasColumn("users", "is_disabled")) {
+  db.exec("ALTER TABLE users ADD COLUMN is_disabled INTEGER NOT NULL DEFAULT 0;");
+}

@@ -16,6 +16,8 @@ interface UserRow {
   id: number;
   username: string;
   password_hash: string;
+  is_admin: number;
+  is_disabled: number;
 }
 
 function generateRoomCode(): string {
@@ -59,7 +61,7 @@ router.post(
     req.session.regenerate((err) => {
       if (err) return res.status(500).json({ error: "Could not start session" });
       req.session.userId = userId;
-      res.json({ user: { id: userId, username } });
+      res.json({ user: { id: userId, username, isAdmin: false } });
     });
   },
 );
@@ -67,15 +69,20 @@ router.post(
 router.post("/login", authLimiter, validateBody(credentialsSchema), (req, res) => {
   const { username, password } = (req as any).validated as { username: string; password: string };
   const row = db
-    .prepare("SELECT id, username, password_hash FROM users WHERE username = ?")
+    .prepare(
+      "SELECT id, username, password_hash, is_admin, is_disabled FROM users WHERE username = ?",
+    )
     .get(username) as UserRow | undefined;
   if (!row || !bcrypt.compareSync(password, row.password_hash)) {
     return res.status(401).json({ error: "Invalid username or password" });
   }
+  if (row.is_disabled) {
+    return res.status(403).json({ error: "This account has been disabled. Contact an administrator." });
+  }
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: "Could not start session" });
     req.session.userId = row.id;
-    res.json({ user: { id: row.id, username: row.username } });
+    res.json({ user: { id: row.id, username: row.username, isAdmin: !!row.is_admin } });
   });
 });
 
@@ -88,10 +95,15 @@ router.post("/logout", (req, res) => {
 
 router.get("/me", requireAuth, (req, res) => {
   const row = db
-    .prepare("SELECT id, username FROM users WHERE id = ?")
-    .get(req.session.userId) as { id: number; username: string } | undefined;
-  if (!row) return res.status(401).json({ error: "Not authenticated" });
-  res.json({ user: row });
+    .prepare("SELECT id, username, is_admin, is_disabled FROM users WHERE id = ?")
+    .get(req.session.userId) as
+    | { id: number; username: string; is_admin: number; is_disabled: number }
+    | undefined;
+  if (!row || row.is_disabled) {
+    req.session.destroy(() => undefined);
+    return res.status(401).json({ error: "Not authenticated" });
+  }
+  res.json({ user: { id: row.id, username: row.username, isAdmin: !!row.is_admin } });
 });
 
 export default router;
