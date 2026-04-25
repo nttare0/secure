@@ -2,6 +2,8 @@ import { Router, type IRouter } from "express";
 import crypto from "node:crypto";
 import { db } from "../lib/db";
 import { requireAuth } from "../lib/auth";
+import { roomActionLimiter } from "../lib/rate-limit";
+import { idParamSchema, inviteCodeSchema, roomNameSchema, validateBody } from "../lib/validation";
 
 const router: IRouter = Router();
 
@@ -18,6 +20,11 @@ function ensureMember(roomId: number, userId: number): boolean {
   return !!row;
 }
 
+function parseRoomId(value: unknown): number | null {
+  const result = idParamSchema.safeParse(String(value));
+  return result.success ? result.data : null;
+}
+
 router.get("/", (req, res) => {
   const userId = req.session.userId!;
   const rows = db
@@ -31,13 +38,13 @@ router.get("/", (req, res) => {
        ORDER BY COALESCE(last_message_at, r.created_at) DESC`,
     )
     .all(userId) as Array<{
-      id: number;
-      name: string;
-      code: string;
-      owner_id: number;
-      member_count: number;
-      last_message_at: number | null;
-    }>;
+    id: number;
+    name: string;
+    code: string;
+    owner_id: number;
+    member_count: number;
+    last_message_at: number | null;
+  }>;
   res.json(
     rows.map((r) => ({
       id: r.id,
@@ -50,12 +57,9 @@ router.get("/", (req, res) => {
   );
 });
 
-router.post("/", (req, res) => {
+router.post("/", roomActionLimiter, validateBody(roomNameSchema), (req, res) => {
   const userId = req.session.userId!;
-  const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
-  if (!name || name.length > 60) {
-    return res.status(400).json({ error: "Name must be 1-60 characters" });
-  }
+  const { name } = (req as any).validated as { name: string };
   let code = generateCode();
   for (let i = 0; i < 5; i++) {
     const exists = db.prepare("SELECT 1 FROM rooms WHERE code = ?").get(code);
@@ -75,27 +79,20 @@ router.post("/", (req, res) => {
   res.json({ id, name, code, isOwner: true, memberCount: 1, lastMessageAt: null });
 });
 
-router.post("/join", (req, res) => {
+router.post("/join", roomActionLimiter, validateBody(inviteCodeSchema), (req, res) => {
   const userId = req.session.userId!;
-  const code = typeof req.body?.code === "string" ? req.body.code.trim().toUpperCase() : "";
-  if (!code) return res.status(400).json({ error: "Invite code required" });
+  const code = ((req as any).validated as { code: string }).code.toUpperCase();
   const room = db
     .prepare("SELECT id, name, code, owner_id FROM rooms WHERE code = ?")
     .get(code) as { id: number; name: string; code: string; owner_id: number } | undefined;
   if (!room) return res.status(404).json({ error: "Invalid invite code" });
-  if (ensureMember(room.id, userId)) {
-    return res.json({
-      id: room.id,
-      name: room.name,
-      code: room.code,
-      isOwner: room.owner_id === userId,
-    });
+  if (!ensureMember(room.id, userId)) {
+    db.prepare("INSERT INTO room_members (room_id, user_id, joined_at) VALUES (?, ?, ?)").run(
+      room.id,
+      userId,
+      Date.now(),
+    );
   }
-  db.prepare("INSERT INTO room_members (room_id, user_id, joined_at) VALUES (?, ?, ?)").run(
-    room.id,
-    userId,
-    Date.now(),
-  );
   res.json({
     id: room.id,
     name: room.name,
@@ -104,10 +101,10 @@ router.post("/join", (req, res) => {
   });
 });
 
-router.post("/:id/leave", (req, res) => {
+router.post("/:id/leave", roomActionLimiter, (req, res) => {
   const userId = req.session.userId!;
-  const roomId = Number(req.params.id);
-  if (!Number.isInteger(roomId)) return res.status(400).json({ error: "Invalid room id" });
+  const roomId = parseRoomId(req.params.id);
+  if (!roomId) return res.status(400).json({ error: "Invalid room id" });
   const room = db.prepare("SELECT owner_id FROM rooms WHERE id = ?").get(roomId) as
     | { owner_id: number }
     | undefined;
@@ -119,10 +116,10 @@ router.post("/:id/leave", (req, res) => {
   res.json({ ok: true });
 });
 
-router.delete("/:id", (req, res) => {
+router.delete("/:id", roomActionLimiter, (req, res) => {
   const userId = req.session.userId!;
-  const roomId = Number(req.params.id);
-  if (!Number.isInteger(roomId)) return res.status(400).json({ error: "Invalid room id" });
+  const roomId = parseRoomId(req.params.id);
+  if (!roomId) return res.status(400).json({ error: "Invalid room id" });
   const room = db.prepare("SELECT owner_id FROM rooms WHERE id = ?").get(roomId) as
     | { owner_id: number }
     | undefined;
@@ -134,8 +131,8 @@ router.delete("/:id", (req, res) => {
 
 router.get("/:id/members", (req, res) => {
   const userId = req.session.userId!;
-  const roomId = Number(req.params.id);
-  if (!Number.isInteger(roomId)) return res.status(400).json({ error: "Invalid room id" });
+  const roomId = parseRoomId(req.params.id);
+  if (!roomId) return res.status(400).json({ error: "Invalid room id" });
   if (!ensureMember(roomId, userId)) return res.status(403).json({ error: "Not a member" });
   const rows = db
     .prepare(

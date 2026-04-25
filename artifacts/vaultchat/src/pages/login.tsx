@@ -1,10 +1,18 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useAuth, useLogin, useRegister } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Shield, Loader2, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -12,19 +20,20 @@ export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  
+
   const { data: user, isLoading: authLoading } = useAuth();
-  
+
   const login = useLogin();
   const register = useRegister();
-  
+
   if (user) {
     setLocation("/");
     return null;
   }
-  
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!username || !password) {
@@ -35,26 +44,31 @@ export default function Login() {
       });
       return;
     }
-    
-    const action = isLogin ? login : register;
-    
-    action.mutate(
-      { username, password },
-      {
-        onSuccess: () => {
-          setLocation("/");
-        },
-        onError: (error: any) => {
-          toast({
-            title: isLogin ? "Login Failed" : "Registration Failed",
-            description: error.message || "An unexpected error occurred.",
-            variant: "destructive",
-          });
-        },
-      }
-    );
+    if (!isLogin && !acceptedTerms) {
+      toast({
+        title: "Terms required",
+        description: "You must accept the Terms & Conditions to create an account.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const onError = (error: any) => {
+      toast({
+        title: isLogin ? "Login Failed" : "Registration Failed",
+        description: error.message || "An unexpected error occurred.",
+        variant: "destructive",
+      });
+    };
+    const onSuccess = () => setLocation("/");
+
+    if (isLogin) {
+      login.mutate({ username, password }, { onSuccess, onError });
+    } else {
+      register.mutate({ username, password, acceptedTerms }, { onSuccess, onError });
+    }
   };
-  
+
   const isPending = login.isPending || register.isPending;
 
   if (authLoading) {
@@ -66,22 +80,24 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
+    <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4 sm:p-6">
       <div className="w-full max-w-md">
-        <div className="flex flex-col items-center mb-8">
+        <div className="flex flex-col items-center mb-6 sm:mb-8">
           <div className="h-12 w-12 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20 mb-4">
             <Shield className="h-6 w-6 text-primary-foreground" />
           </div>
-          <h1 className="text-3xl font-bold text-foreground">VaultChat</h1>
-          <p className="text-muted-foreground mt-2">Secure, private, calm communication.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">VaultChat</h1>
+          <p className="text-muted-foreground mt-2 text-center text-sm sm:text-base">
+            Secure, private, calm communication.
+          </p>
         </div>
-        
+
         <Card className="border-border/50 shadow-xl shadow-black/5 dark:shadow-black/20">
           <CardHeader>
             <CardTitle>{isLogin ? "Welcome back" : "Create your vault"}</CardTitle>
             <CardDescription>
-              {isLogin 
-                ? "Enter your credentials to access your secure rooms." 
+              {isLogin
+                ? "Enter your credentials to access your secure rooms."
                 : "Set up your credentials to start communicating securely."}
             </CardDescription>
           </CardHeader>
@@ -95,6 +111,7 @@ export default function Login() {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   disabled={isPending}
+                  autoComplete="username"
                   className="bg-background"
                 />
               </div>
@@ -107,9 +124,30 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={isPending}
+                  autoComplete={isLogin ? "current-password" : "new-password"}
                   className="bg-background"
                 />
               </div>
+
+              {!isLogin && (
+                <div className="flex items-start gap-2 pt-1">
+                  <Checkbox
+                    id="terms"
+                    checked={acceptedTerms}
+                    onCheckedChange={(v) => setAcceptedTerms(v === true)}
+                    disabled={isPending}
+                    className="mt-0.5"
+                  />
+                  <Label htmlFor="terms" className="text-sm font-normal leading-relaxed cursor-pointer">
+                    I agree to the{" "}
+                    <Link href="/terms" className="text-primary font-medium hover:underline">
+                      Terms &amp; Conditions
+                    </Link>{" "}
+                    and acceptable-use policy.
+                  </Label>
+                </div>
+              )}
+
               <Button type="submit" className="w-full" disabled={isPending}>
                 {isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -120,8 +158,8 @@ export default function Login() {
               </Button>
             </form>
           </CardContent>
-          <CardFooter className="flex justify-center border-t border-border/50 pt-6">
-            <p className="text-sm text-muted-foreground">
+          <CardFooter className="flex flex-col gap-3 border-t border-border/50 pt-6">
+            <p className="text-sm text-muted-foreground text-center">
               {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
               <button
                 type="button"
@@ -132,6 +170,12 @@ export default function Login() {
                 {isLogin ? "Create one" : "Sign in"}
               </button>
             </p>
+            <Link
+              href="/terms"
+              className="text-xs text-muted-foreground hover:text-foreground hover:underline"
+            >
+              Terms &amp; Conditions
+            </Link>
           </CardFooter>
         </Card>
       </div>

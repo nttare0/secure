@@ -5,10 +5,22 @@ import session from "express-session";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { SqliteStore } from "./lib/session-store";
+import { generalLimiter } from "./lib/rate-limit";
 
 const app: Express = express();
 
+const isProd = process.env.NODE_ENV === "production";
+
 app.set("trust proxy", 1);
+app.disable("x-powered-by");
+
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+  next();
+});
 
 app.use(
   pinoHttp({
@@ -24,34 +36,50 @@ app.use(
   }),
 );
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json({ limit: "1mb" }));
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "100kb" }));
+app.use(express.urlencoded({ extended: true, limit: "100kb" }));
 
-const sessionSecret = process.env.SESSION_SECRET ?? "dev-fallback-not-for-production";
+const sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret) {
+  if (isProd) {
+    throw new Error("SESSION_SECRET environment variable is required in production");
+  }
+  logger.warn("SESSION_SECRET not set; using insecure dev fallback. Do NOT use in production.");
+}
 
 app.use(
   session({
     name: "vc.sid",
-    secret: sessionSecret,
+    secret: sessionSecret ?? "dev-only-fallback-do-not-use-in-prod",
     resave: false,
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
       sameSite: "lax",
-      secure: false,
+      secure: isProd,
       maxAge: 1000 * 60 * 60 * 24 * 30,
     },
     store: new SqliteStore(),
   }),
 );
 
-app.use("/api", router);
+app.use("/api", generalLimiter, router);
 
 // JSON error handler so errors don't return HTML
 app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
   req.log?.error({ err }, "Unhandled error");
   if (res.headersSent) return;
-  const message = err instanceof Error ? err.message : "Internal server error";
+  // Multer / payload-too-large
+  const anyErr = err as { type?: string; status?: number; message?: string };
+  if (anyErr?.type === "entity.too.large" || anyErr?.status === 413) {
+    return res.status(413).json({ error: "Request payload too large" });
+  }
+  // Don't leak internal error details in production
+  const message = isProd
+    ? "Internal server error"
+    : err instanceof Error
+      ? err.message
+      : "Internal server error";
   res.status(500).json({ error: message });
 });
 

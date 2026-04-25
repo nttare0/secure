@@ -27,6 +27,7 @@ import {
   MessageSquare,
   KeyRound,
   Search,
+  X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -34,9 +35,11 @@ import { cn } from "@/lib/utils";
 interface SidebarProps {
   selection?: Selection;
   onSelect: (s: Selection) => void;
+  isOpen?: boolean;
+  onClose?: () => void;
 }
 
-export function Sidebar({ selection, onSelect }: SidebarProps) {
+export function Sidebar({ selection, onSelect, isOpen, onClose }: SidebarProps) {
   const { data: user } = useAuth();
   const { data: rooms, isLoading: roomsLoading } = useRooms();
   const { data: dms, isLoading: dmsLoading } = useDms();
@@ -105,7 +108,16 @@ export function Sidebar({ selection, onSelect }: SidebarProps) {
   };
 
   return (
-    <div className="w-80 flex-shrink-0 border-r border-border bg-sidebar flex flex-col h-full overflow-hidden">
+    <div
+      className={cn(
+        "border-r border-border bg-sidebar flex flex-col h-full overflow-hidden",
+        "fixed inset-y-0 left-0 z-50 w-[85%] max-w-xs shadow-2xl transition-transform duration-200 ease-out",
+        "md:relative md:w-80 md:max-w-none md:flex-shrink-0 md:translate-x-0 md:shadow-none md:transition-none md:z-auto",
+        isOpen ? "translate-x-0" : "-translate-x-full",
+      )}
+      role="navigation"
+      aria-label="Sidebar"
+    >
       <div className="h-14 flex items-center justify-between px-4 border-b border-border/50 shrink-0">
         <div className="flex items-center gap-2">
           <div className="h-8 w-8 bg-primary rounded-md flex items-center justify-center">
@@ -113,6 +125,15 @@ export function Sidebar({ selection, onSelect }: SidebarProps) {
           </div>
           <span className="font-semibold text-sidebar-foreground">VaultChat</span>
         </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          className="md:hidden h-8 w-8 text-muted-foreground hover:text-foreground"
+          aria-label="Close menu"
+        >
+          <X className="h-4 w-4" />
+        </Button>
       </div>
 
       <Tabs defaultValue="rooms" className="flex-1 flex flex-col min-h-0">

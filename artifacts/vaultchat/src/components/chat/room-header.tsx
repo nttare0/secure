@@ -9,9 +9,10 @@ import { useToast } from "@/hooks/use-toast";
 interface RoomHeaderProps {
   room: Room;
   onClearSelection: () => void;
+  menuSlot?: React.ReactNode;
 }
 
-export function RoomHeader({ room, onClearSelection }: RoomHeaderProps) {
+export function RoomHeader({ room, onClearSelection, menuSlot }: RoomHeaderProps) {
   const [copied, setCopied] = useState(false);
   const { data: members } = useRoomMembers(room.id);
   const leaveRoom = useLeaveRoom();
@@ -48,36 +49,37 @@ export function RoomHeader({ room, onClearSelection }: RoomHeaderProps) {
   };
 
   return (
-    <div className="h-16 border-b border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 flex items-center justify-between px-6 shrink-0 z-10 sticky top-0">
-      <div className="flex items-center gap-4">
-        <div className="h-10 w-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center border border-primary/20">
-          <Hash className="h-5 w-5" />
+    <div className="h-14 sm:h-16 border-b border-border/50 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 flex items-center justify-between px-3 sm:px-6 shrink-0 z-10 sticky top-0 gap-2">
+      <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
+        {menuSlot}
+        <div className="h-9 w-9 sm:h-10 sm:w-10 bg-primary/10 text-primary rounded-xl flex items-center justify-center border border-primary/20 shrink-0">
+          <Hash className="h-4 w-4 sm:h-5 sm:w-5" />
         </div>
-        <div>
-          <h2 className="text-base font-semibold text-foreground leading-tight">{room.name}</h2>
+        <div className="min-w-0">
+          <h2 className="text-sm sm:text-base font-semibold text-foreground leading-tight truncate">{room.name}</h2>
           <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
             <span className="flex items-center gap-1.5">
-              <Users className="h-3.5 w-3.5" /> 
+              <Users className="h-3.5 w-3.5" />
               {members?.length || room.memberCount} members
             </span>
-            <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+            <span className="hidden sm:flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
               <Shield className="h-3 w-3" /> Secure
             </span>
           </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button 
-              variant="outline" 
-              size="sm" 
-              className="h-9 px-3 gap-2 bg-muted/50 border-dashed hover:bg-muted"
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 px-2 sm:px-3 gap-1.5 sm:gap-2 bg-muted/50 border-dashed hover:bg-muted"
               onClick={handleCopyCode}
             >
               <span className="font-mono text-xs font-medium text-foreground tracking-wide">{room.code}</span>
-              <div className="h-4 w-px bg-border/80 mx-1" />
+              <div className="hidden sm:block h-4 w-px bg-border/80 mx-1" />
               {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5 text-muted-foreground" />}
             </Button>
           </TooltipTrigger>

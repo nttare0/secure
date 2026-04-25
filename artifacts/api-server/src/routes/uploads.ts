@@ -3,13 +3,18 @@ import path from "node:path";
 import fs from "node:fs";
 import { db, uploadsDir } from "../lib/db";
 import { requireAuth } from "../lib/auth";
+import { filenameSchema } from "../lib/validation";
 
 const router: IRouter = Router();
 
 router.get("/:filename", requireAuth, (req, res) => {
   const userId = req.session.userId!;
-  const filename = req.params.filename;
-  if (!/^[A-Za-z0-9.]+$/.test(filename)) {
+  const parsed = filenameSchema.safeParse(req.params.filename);
+  if (!parsed.success) {
+    return res.status(400).json({ error: "Invalid filename" });
+  }
+  const filename = parsed.data;
+  if (filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
     return res.status(400).json({ error: "Invalid filename" });
   }
   const row = db

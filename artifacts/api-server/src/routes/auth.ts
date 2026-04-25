@@ -3,6 +3,12 @@ import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import { db } from "../lib/db";
 import { requireAuth } from "../lib/auth";
+import { authLimiter, registerLimiter } from "../lib/rate-limit";
+import {
+  credentialsSchema,
+  registerSchema,
+  validateBody,
+} from "../lib/validation";
 
 const router: IRouter = Router();
 
@@ -33,45 +39,44 @@ function createStarterRoom(userId: number, username: string): void {
   );
 }
 
-router.post("/register", (req, res) => {
-  const { username, password } = req.body ?? {};
-  if (typeof username !== "string" || typeof password !== "string") {
-    return res.status(400).json({ error: "Username and password required" });
-  }
-  const u = username.trim();
-  if (u.length < 3 || u.length > 24 || !/^[A-Za-z0-9_.-]+$/.test(u)) {
-    return res.status(400).json({ error: "Username must be 3-24 chars (letters, numbers, _ . -)" });
-  }
-  if (password.length < 6) {
-    return res.status(400).json({ error: "Password must be at least 6 characters" });
-  }
-  const existing = db.prepare("SELECT id FROM users WHERE username = ?").get(u);
-  if (existing) {
-    return res.status(409).json({ error: "Username is already taken" });
-  }
-  const hash = bcrypt.hashSync(password, 12);
-  const info = db
-    .prepare("INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)")
-    .run(u, hash, Date.now());
-  const userId = Number(info.lastInsertRowid);
-  createStarterRoom(userId, u);
-  req.session.userId = userId;
-  res.json({ user: { id: userId, username: u } });
-});
+router.post(
+  "/register",
+  registerLimiter,
+  authLimiter,
+  validateBody(registerSchema),
+  (req, res) => {
+    const { username, password } = (req as any).validated as { username: string; password: string };
+    const existing = db.prepare("SELECT id FROM users WHERE username = ?").get(username);
+    if (existing) {
+      return res.status(409).json({ error: "Username is already taken" });
+    }
+    const hash = bcrypt.hashSync(password, 12);
+    const info = db
+      .prepare("INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)")
+      .run(username, hash, Date.now());
+    const userId = Number(info.lastInsertRowid);
+    createStarterRoom(userId, username);
+    req.session.regenerate((err) => {
+      if (err) return res.status(500).json({ error: "Could not start session" });
+      req.session.userId = userId;
+      res.json({ user: { id: userId, username } });
+    });
+  },
+);
 
-router.post("/login", (req, res) => {
-  const { username, password } = req.body ?? {};
-  if (typeof username !== "string" || typeof password !== "string") {
-    return res.status(400).json({ error: "Username and password required" });
-  }
+router.post("/login", authLimiter, validateBody(credentialsSchema), (req, res) => {
+  const { username, password } = (req as any).validated as { username: string; password: string };
   const row = db
     .prepare("SELECT id, username, password_hash FROM users WHERE username = ?")
-    .get(username.trim()) as UserRow | undefined;
+    .get(username) as UserRow | undefined;
   if (!row || !bcrypt.compareSync(password, row.password_hash)) {
     return res.status(401).json({ error: "Invalid username or password" });
   }
-  req.session.userId = row.id;
-  res.json({ user: { id: row.id, username: row.username } });
+  req.session.regenerate((err) => {
+    if (err) return res.status(500).json({ error: "Could not start session" });
+    req.session.userId = row.id;
+    res.json({ user: { id: row.id, username: row.username } });
+  });
 });
 
 router.post("/logout", (req, res) => {

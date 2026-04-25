@@ -9,7 +9,8 @@ import { MessageList } from "@/components/chat/message-list";
 import { Composer } from "@/components/chat/composer";
 import { RoomHeader } from "@/components/chat/room-header";
 import { DmHeader } from "@/components/chat/dm-header";
-import { Shield, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Shield, Loader2, Menu } from "lucide-react";
 import type { Selection } from "@/lib/selection";
 
 export default function Home() {
@@ -17,6 +18,7 @@ export default function Home() {
   const { data: rooms } = useRooms();
   const [, setLocation] = useLocation();
   const [selection, setSelection] = useState<Selection | undefined>();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) setLocation("/login");
@@ -27,6 +29,15 @@ export default function Home() {
       setSelection({ type: "room", id: rooms[0].id });
     }
   }, [rooms, selection]);
+
+  const handleSelect = (s: Selection) => {
+    setSelection(s);
+    setSidebarOpen(false);
+  };
+  const handleClearSelection = () => {
+    setSelection(undefined);
+    setSidebarOpen(true);
+  };
 
   const currentRoomId = selection?.type === "room" ? selection.id : undefined;
   const currentDmUserId = selection?.type === "dm" ? selection.userId : undefined;
@@ -43,14 +54,43 @@ export default function Home() {
     );
   }
 
+  const MenuButton = (
+    <Button
+      variant="ghost"
+      size="icon"
+      onClick={() => setSidebarOpen(true)}
+      className="md:hidden h-9 w-9 text-muted-foreground hover:text-foreground -ml-1"
+      aria-label="Open menu"
+    >
+      <Menu className="h-5 w-5" />
+    </Button>
+  );
+
   return (
     <div className="h-screen w-full flex bg-background overflow-hidden selection:bg-primary/20">
-      <Sidebar selection={selection} onSelect={setSelection} />
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-foreground/40 backdrop-blur-sm z-40 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden
+        />
+      )}
+
+      <Sidebar
+        selection={selection}
+        onSelect={handleSelect}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
 
       <main className="flex-1 flex flex-col min-w-0 bg-background/50 relative">
         {currentRoom ? (
           <>
-            <RoomHeader room={currentRoom} onClearSelection={() => setSelection(undefined)} />
+            <RoomHeader
+              room={currentRoom}
+              onClearSelection={handleClearSelection}
+              menuSlot={MenuButton}
+            />
             {roomMessagesLoading ? (
               <div className="flex-1 flex items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/50" />
@@ -62,7 +102,7 @@ export default function Home() {
           </>
         ) : currentDmUserId && dmThread ? (
           <>
-            <DmHeader username={dmThread.peer.username} />
+            <DmHeader username={dmThread.peer.username} menuSlot={MenuButton} />
             {dmLoading ? (
               <div className="flex-1 flex items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/50" />
@@ -77,15 +117,23 @@ export default function Home() {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/50" />
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-background">
-            <div className="h-20 w-20 bg-primary/5 rounded-2xl flex items-center justify-center mb-6 border border-primary/10 shadow-inner">
-              <Shield className="h-10 w-10 text-primary/40" />
+          <>
+            <div className="h-14 sm:h-16 border-b border-border/50 flex items-center px-4 sm:px-6 md:hidden">
+              {MenuButton}
+              <span className="ml-2 font-semibold text-foreground">VaultChat</span>
             </div>
-            <h2 className="text-2xl font-bold text-foreground mb-2 tracking-tight">Your Private Vault</h2>
-            <p className="text-muted-foreground max-w-md text-base leading-relaxed">
-              Select a room or direct message from the sidebar to start communicating securely.
-            </p>
-          </div>
+            <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-8 text-center bg-background">
+              <div className="h-16 w-16 sm:h-20 sm:w-20 bg-primary/5 rounded-2xl flex items-center justify-center mb-5 sm:mb-6 border border-primary/10 shadow-inner">
+                <Shield className="h-8 w-8 sm:h-10 sm:w-10 text-primary/40" />
+              </div>
+              <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-2 tracking-tight">
+                Your Private Vault
+              </h2>
+              <p className="text-muted-foreground max-w-md text-sm sm:text-base leading-relaxed">
+                Select a room or direct message from the sidebar to start communicating securely.
+              </p>
+            </div>
+          </>
         )}
       </main>
     </div>

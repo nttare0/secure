@@ -31,7 +31,7 @@ export function useLogin() {
 export function useRegister() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { username: string; password: string }) => 
+    mutationFn: (data: { username: string; password: string; acceptedTerms: boolean }) =>
       fetchApi<{ user: User }>('/auth/register', {
         method: 'POST',
         body: JSON.stringify(data),

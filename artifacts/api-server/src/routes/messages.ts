@@ -5,8 +5,15 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import { db, uploadsDir } from "../lib/db";
 import { requireAuth } from "../lib/auth";
+import { writeLimiter } from "../lib/rate-limit";
+import { idParamSchema, messageContentSchema } from "../lib/validation";
 
 const router: IRouter = Router();
+
+function parseId(value: unknown): number | null {
+  const result = idParamSchema.safeParse(String(value));
+  return result.success ? result.data : null;
+}
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadsDir),
@@ -60,14 +67,14 @@ function serialize(m: MessageRow) {
 
 router.get("/:id/messages", requireAuth, (req, res) => {
   const userId = req.session.userId!;
-  const roomId = Number(req.params.id);
-  if (!Number.isInteger(roomId)) return res.status(400).json({ error: "Invalid room id" });
+  const roomId = parseId(req.params.id);
+  if (!roomId) return res.status(400).json({ error: "Invalid room id" });
   if (!ensureMember(roomId, userId)) return res.status(403).json({ error: "Not a member" });
   const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
   const before = req.query.before ? Number(req.query.before) : null;
   const params: (number | null)[] = [roomId];
   let where = "m.room_id = ?";
-  if (before && Number.isInteger(before)) {
+  if (before && Number.isInteger(before) && before > 0) {
     where += " AND m.id < ?";
     params.push(before);
   }
@@ -89,6 +96,7 @@ router.get("/:id/messages", requireAuth, (req, res) => {
 router.post(
   "/:id/messages",
   requireAuth,
+  writeLimiter,
   (req, res, next) => {
     upload.single("file")(req, res, (err) => {
       if (err) {
@@ -102,8 +110,8 @@ router.post(
   },
   (req, res) => {
     const userId = req.session.userId!;
-    const roomId = Number(req.params.id);
-    if (!Number.isInteger(roomId)) {
+    const roomId = parseId(req.params.id);
+    if (!roomId) {
       if (req.file) fs.unlink(req.file.path, () => {});
       return res.status(400).json({ error: "Invalid room id" });
     }
@@ -111,14 +119,16 @@ router.post(
       if (req.file) fs.unlink(req.file.path, () => {});
       return res.status(403).json({ error: "Not a member" });
     }
-    const content = typeof req.body?.content === "string" ? req.body.content.trim() : "";
+    const rawContent = typeof req.body?.content === "string" ? req.body.content : "";
+    const parsed = messageContentSchema.safeParse(rawContent);
+    if (!parsed.success) {
+      if (req.file) fs.unlink(req.file.path, () => {});
+      return res.status(400).json({ error: "Message too long (max 4000 chars)" });
+    }
+    const content = parsed.data.trim();
     const file = req.file;
     if (!content && !file) {
       return res.status(400).json({ error: "Message must have text or a file" });
-    }
-    if (content.length > 4000) {
-      if (file) fs.unlink(file.path, () => {});
-      return res.status(400).json({ error: "Message too long (max 4000 chars)" });
     }
     const now = Date.now();
     const info = db
