@@ -17,48 +17,61 @@ router.get("/:filename", requireAuth, (req, res) => {
   if (filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
     return res.status(400).json({ error: "Invalid filename" });
   }
-  const row = db
+
+  // A file may be referenced by many room messages or DMs (e.g. via forward).
+  // The user has access if they belong to ANY referenced room or DM thread.
+  const roomRows = db
     .prepare(
-      `SELECT m.attachment_original_name AS name, m.attachment_mime_type AS mime, m.room_id AS roomId
-       FROM messages m
-       WHERE m.attachment_filename = ?
-       LIMIT 1`,
+      `SELECT m.room_id, m.attachment_original_name AS name, m.attachment_mime_type AS mime
+       FROM messages m WHERE m.attachment_filename = ?`,
     )
-    .get(filename) as { name: string; mime: string; roomId: number } | undefined;
-  const dmRow = !row
-    ? (db
-        .prepare(
-          `SELECT d.attachment_original_name AS name, d.attachment_mime_type AS mime,
-                  d.sender_id AS senderId, d.recipient_id AS recipientId
-           FROM dms d WHERE d.attachment_filename = ? LIMIT 1`,
-        )
-        .get(filename) as
-        | { name: string; mime: string; senderId: number; recipientId: number }
-        | undefined)
-    : undefined;
-  if (!row && !dmRow) return res.status(404).json({ error: "File not found" });
-  let name: string;
-  let mime: string;
-  if (row) {
-    const isMember = db
-      .prepare("SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?")
-      .get(row.roomId, userId);
-    if (!isMember) return res.status(403).json({ error: "Forbidden" });
-    name = row.name;
-    mime = row.mime;
-  } else {
-    if (dmRow!.senderId !== userId && dmRow!.recipientId !== userId) {
-      return res.status(403).json({ error: "Forbidden" });
-    }
-    name = dmRow!.name;
-    mime = dmRow!.mime;
+    .all(filename) as Array<{ room_id: number; name: string; mime: string }>;
+
+  const dmRows = db
+    .prepare(
+      `SELECT d.sender_id, d.recipient_id,
+              d.attachment_original_name AS name, d.attachment_mime_type AS mime
+       FROM dms d WHERE d.attachment_filename = ?`,
+    )
+    .all(filename) as Array<{
+    sender_id: number;
+    recipient_id: number;
+    name: string;
+    mime: string;
+  }>;
+
+  if (roomRows.length === 0 && dmRows.length === 0) {
+    return res.status(404).json({ error: "File not found" });
   }
+
+  let access: { name: string; mime: string } | null = null;
+  for (const r of roomRows) {
+    const member = db
+      .prepare("SELECT 1 FROM room_members WHERE room_id = ? AND user_id = ?")
+      .get(r.room_id, userId);
+    if (member) {
+      access = { name: r.name, mime: r.mime };
+      break;
+    }
+  }
+  if (!access) {
+    for (const d of dmRows) {
+      if (d.sender_id === userId || d.recipient_id === userId) {
+        access = { name: d.name, mime: d.mime };
+        break;
+      }
+    }
+  }
+  if (!access) return res.status(403).json({ error: "Forbidden" });
+
   const filePath = path.join(uploadsDir, filename);
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: "File missing" });
-  res.setHeader("Content-Type", mime || "application/octet-stream");
+
+  res.setHeader("Content-Type", access.mime || "application/octet-stream");
+  // inline so browsers preview images/video/audio/pdf instead of downloading
   res.setHeader(
     "Content-Disposition",
-    `inline; filename*=UTF-8''${encodeURIComponent(name || filename)}`,
+    `inline; filename*=UTF-8''${encodeURIComponent(access.name || filename)}`,
   );
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.sendFile(filePath);

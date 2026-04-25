@@ -7,11 +7,28 @@ declare module "express-session" {
   }
 }
 
+const touchSeenStmt = db.prepare("UPDATE users SET last_seen_at = ? WHERE id = ?");
+const lastTouchByUser = new Map<number, number>();
+const TOUCH_INTERVAL_MS = 15_000;
+
+export function touchLastSeen(userId: number): void {
+  const now = Date.now();
+  const last = lastTouchByUser.get(userId) ?? 0;
+  if (now - last < TOUCH_INTERVAL_MS) return;
+  lastTouchByUser.set(userId, now);
+  try {
+    touchSeenStmt.run(now, userId);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function requireAuth(req: Request, res: Response, next: NextFunction): void {
   if (!req.session?.userId) {
     res.status(401).json({ error: "Not authenticated" });
     return;
   }
+  touchLastSeen(req.session.userId);
   next();
 }
 

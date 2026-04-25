@@ -6,7 +6,8 @@ import crypto from "node:crypto";
 import { db, uploadsDir } from "../lib/db";
 import { requireAuth } from "../lib/auth";
 import { writeLimiter } from "../lib/rate-limit";
-import { idParamSchema, messageContentSchema } from "../lib/validation";
+import { editMessageSchema, idParamSchema, messageContentSchema, validateBody } from "../lib/validation";
+import { maybeUnlinkAttachment } from "../lib/attachments";
 
 const router: IRouter = Router();
 
@@ -24,9 +25,11 @@ const storage = multer.diskStorage({
   },
 });
 
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100MB
+
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 },
 });
 
 function ensureMember(roomId: number, userId: number): boolean {
@@ -45,7 +48,30 @@ interface MessageRow {
   attachment_mime_type: string | null;
   attachment_size: number | null;
   created_at: number;
+  edited_at: number | null;
+  reply_to_id: number | null;
+  forwarded_from_username: string | null;
+  reply_username: string | null;
+  reply_content: string | null;
+  reply_attachment_name: string | null;
 }
+
+const SELECT_MESSAGE_COLS = `
+  m.id, m.user_id, u.username, m.content,
+  m.attachment_filename, m.attachment_original_name,
+  m.attachment_mime_type, m.attachment_size, m.created_at,
+  m.edited_at, m.reply_to_id, m.forwarded_from_username,
+  ru.username AS reply_username,
+  rm.content AS reply_content,
+  rm.attachment_original_name AS reply_attachment_name
+`;
+
+const FROM_MESSAGE_JOINS = `
+  FROM messages m
+  JOIN users u ON u.id = m.user_id
+  LEFT JOIN messages rm ON rm.id = m.reply_to_id
+  LEFT JOIN users ru ON ru.id = rm.user_id
+`;
 
 function serialize(m: MessageRow) {
   return {
@@ -62,6 +88,16 @@ function serialize(m: MessageRow) {
         }
       : null,
     createdAt: m.created_at,
+    editedAt: m.edited_at,
+    forwardedFrom: m.forwarded_from_username,
+    replyTo: m.reply_to_id
+      ? {
+          id: m.reply_to_id,
+          username: m.reply_username,
+          content: m.reply_content,
+          attachmentName: m.reply_attachment_name,
+        }
+      : null,
   };
 }
 
@@ -81,10 +117,8 @@ router.get("/:id/messages", requireAuth, (req, res) => {
   params.push(limit);
   const rows = db
     .prepare(
-      `SELECT m.id, m.user_id, u.username, m.content,
-              m.attachment_filename, m.attachment_original_name,
-              m.attachment_mime_type, m.attachment_size, m.created_at
-       FROM messages m JOIN users u ON u.id = m.user_id
+      `SELECT ${SELECT_MESSAGE_COLS}
+       ${FROM_MESSAGE_JOINS}
        WHERE ${where}
        ORDER BY m.id DESC
        LIMIT ?`,
@@ -101,7 +135,7 @@ router.post(
     upload.single("file")(req, res, (err) => {
       if (err) {
         if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
-          return res.status(413).json({ error: "File too large (max 10MB)" });
+          return res.status(413).json({ error: "File too large (max 100MB)" });
         }
         return res.status(400).json({ error: err.message ?? "Upload failed" });
       }
@@ -130,12 +164,25 @@ router.post(
     if (!content && !file) {
       return res.status(400).json({ error: "Message must have text or a file" });
     }
+
+    let replyToId: number | null = null;
+    if (req.body?.replyToId) {
+      const rid = Number(req.body.replyToId);
+      if (Number.isInteger(rid) && rid > 0) {
+        const exists = db
+          .prepare("SELECT 1 FROM messages WHERE id = ? AND room_id = ?")
+          .get(rid, roomId);
+        if (exists) replyToId = rid;
+      }
+    }
+
     const now = Date.now();
     const info = db
       .prepare(
         `INSERT INTO messages (room_id, user_id, content, attachment_filename,
-                               attachment_original_name, attachment_mime_type, attachment_size, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                               attachment_original_name, attachment_mime_type, attachment_size,
+                               created_at, reply_to_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         roomId,
@@ -146,18 +193,68 @@ router.post(
         file?.mimetype ?? null,
         file?.size ?? null,
         now,
+        replyToId,
       );
     const row = db
-      .prepare(
-        `SELECT m.id, m.user_id, u.username, m.content,
-                m.attachment_filename, m.attachment_original_name,
-                m.attachment_mime_type, m.attachment_size, m.created_at
-         FROM messages m JOIN users u ON u.id = m.user_id
-         WHERE m.id = ?`,
-      )
+      .prepare(`SELECT ${SELECT_MESSAGE_COLS} ${FROM_MESSAGE_JOINS} WHERE m.id = ?`)
       .get(Number(info.lastInsertRowid)) as MessageRow;
     res.json(serialize(row));
   },
 );
+
+router.patch(
+  "/:id/messages/:msgId",
+  requireAuth,
+  writeLimiter,
+  validateBody(editMessageSchema),
+  (req, res) => {
+    const userId = req.session.userId!;
+    const roomId = parseId(req.params.id);
+    const msgId = parseId(req.params.msgId);
+    if (!roomId || !msgId) return res.status(400).json({ error: "Invalid id" });
+    const row = db
+      .prepare("SELECT user_id, room_id FROM messages WHERE id = ?")
+      .get(msgId) as { user_id: number; room_id: number } | undefined;
+    if (!row || row.room_id !== roomId) return res.status(404).json({ error: "Not found" });
+    if (row.user_id !== userId) return res.status(403).json({ error: "You can only edit your own messages" });
+    const { content } = (req as any).validated as { content: string };
+    db.prepare("UPDATE messages SET content = ?, edited_at = ? WHERE id = ?").run(
+      content,
+      Date.now(),
+      msgId,
+    );
+    const updated = db
+      .prepare(`SELECT ${SELECT_MESSAGE_COLS} ${FROM_MESSAGE_JOINS} WHERE m.id = ?`)
+      .get(msgId) as MessageRow;
+    res.json(serialize(updated));
+  },
+);
+
+router.delete("/:id/messages/:msgId", requireAuth, writeLimiter, (req, res) => {
+  const userId = req.session.userId!;
+  const roomId = parseId(req.params.id);
+  const msgId = parseId(req.params.msgId);
+  if (!roomId || !msgId) return res.status(400).json({ error: "Invalid id" });
+  const row = db
+    .prepare(
+      "SELECT user_id, room_id, attachment_filename FROM messages WHERE id = ?",
+    )
+    .get(msgId) as
+    | { user_id: number; room_id: number; attachment_filename: string | null }
+    | undefined;
+  if (!row || row.room_id !== roomId) return res.status(404).json({ error: "Not found" });
+  if (row.user_id !== userId) {
+    // Allow room owner to delete any message in their room
+    const owner = db
+      .prepare("SELECT owner_id FROM rooms WHERE id = ?")
+      .get(roomId) as { owner_id: number } | undefined;
+    if (!owner || owner.owner_id !== userId) {
+      return res.status(403).json({ error: "You can only delete your own messages" });
+    }
+  }
+  db.prepare("DELETE FROM messages WHERE id = ?").run(msgId);
+  maybeUnlinkAttachment(row.attachment_filename);
+  res.json({ ok: true });
+});
 
 export default router;

@@ -67,7 +67,11 @@ router.post(
 );
 
 router.post("/login", authLimiter, validateBody(credentialsSchema), (req, res) => {
-  const { username, password } = (req as any).validated as { username: string; password: string };
+  const { username, password, rememberMe } = (req as any).validated as {
+    username: string;
+    password: string;
+    rememberMe: boolean;
+  };
   const row = db
     .prepare(
       "SELECT id, username, password_hash, is_admin, is_disabled FROM users WHERE username = ?",
@@ -82,6 +86,13 @@ router.post("/login", authLimiter, validateBody(credentialsSchema), (req, res) =
   req.session.regenerate((err) => {
     if (err) return res.status(500).json({ error: "Could not start session" });
     req.session.userId = row.id;
+    if (rememberMe === false) {
+      // Browser-session cookie (cleared when browser closes)
+      (req.session.cookie as unknown as { expires: false }).expires = false;
+      req.session.cookie.maxAge = undefined as unknown as number;
+    } else {
+      req.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 30;
+    }
     res.json({ user: { id: row.id, username: row.username, isAdmin: !!row.is_admin } });
   });
 });

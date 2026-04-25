@@ -6,7 +6,14 @@ import crypto from "node:crypto";
 import { db, uploadsDir } from "../lib/db";
 import { requireAuth } from "../lib/auth";
 import { writeLimiter } from "../lib/rate-limit";
-import { idParamSchema, messageContentSchema, searchQuerySchema } from "../lib/validation";
+import {
+  editMessageSchema,
+  idParamSchema,
+  messageContentSchema,
+  searchQuerySchema,
+  validateBody,
+} from "../lib/validation";
+import { maybeUnlinkAttachment } from "../lib/attachments";
 
 const router: IRouter = Router();
 
@@ -24,7 +31,8 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
+const MAX_UPLOAD_BYTES = 100 * 1024 * 1024; // 100MB
+const upload = multer({ storage, limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 } });
 
 interface DmRow {
   id: number;
@@ -37,7 +45,30 @@ interface DmRow {
   attachment_mime_type: string | null;
   attachment_size: number | null;
   created_at: number;
+  edited_at: number | null;
+  reply_to_id: number | null;
+  forwarded_from_username: string | null;
+  reply_username: string | null;
+  reply_content: string | null;
+  reply_attachment_name: string | null;
 }
+
+const SELECT_DM_COLS = `
+  d.id, d.sender_id, d.recipient_id, u.username AS sender_name, d.content,
+  d.attachment_filename, d.attachment_original_name,
+  d.attachment_mime_type, d.attachment_size, d.created_at,
+  d.edited_at, d.reply_to_id, d.forwarded_from_username,
+  ru.username AS reply_username,
+  rd.content AS reply_content,
+  rd.attachment_original_name AS reply_attachment_name
+`;
+
+const FROM_DM_JOINS = `
+  FROM dms d
+  JOIN users u ON u.id = d.sender_id
+  LEFT JOIN dms rd ON rd.id = d.reply_to_id
+  LEFT JOIN users ru ON ru.id = rd.sender_id
+`;
 
 function serialize(m: DmRow) {
   return {
@@ -56,6 +87,16 @@ function serialize(m: DmRow) {
         }
       : null,
     createdAt: m.created_at,
+    editedAt: m.edited_at,
+    forwardedFrom: m.forwarded_from_username,
+    replyTo: m.reply_to_id
+      ? {
+          id: m.reply_to_id,
+          username: m.reply_username,
+          content: m.reply_content,
+          attachmentName: m.reply_attachment_name,
+        }
+      : null,
   };
 }
 
@@ -63,7 +104,7 @@ router.get("/", requireAuth, (req, res) => {
   const userId = req.session.userId!;
   const rows = db
     .prepare(
-      `SELECT u.id AS userId, u.username,
+      `SELECT u.id AS userId, u.username, u.last_seen_at AS lastSeen,
               (SELECT MAX(created_at) FROM dms
                 WHERE (sender_id = ? AND recipient_id = u.id)
                    OR (sender_id = u.id AND recipient_id = ?)) AS lastMessageAt,
@@ -92,7 +133,7 @@ router.get("/users/search", requireAuth, (req, res) => {
   const safe = q.replace(/[%_\\]/g, (c) => "\\" + c);
   const rows = db
     .prepare(
-      `SELECT id, username FROM users
+      `SELECT id, username, last_seen_at AS lastSeen FROM users
        WHERE id != ? AND username LIKE ? ESCAPE '\\' ORDER BY username LIMIT 10`,
     )
     .all(userId, `%${safe}%`);
@@ -103,8 +144,10 @@ router.get("/:userId/messages", requireAuth, (req, res) => {
   const userId = req.session.userId!;
   const otherId = parseId(req.params.userId);
   if (!otherId) return res.status(400).json({ error: "Invalid user id" });
-  const other = db.prepare("SELECT id, username FROM users WHERE id = ?").get(otherId) as
-    | { id: number; username: string }
+  const other = db
+    .prepare("SELECT id, username, last_seen_at FROM users WHERE id = ?")
+    .get(otherId) as
+    | { id: number; username: string; last_seen_at: number | null }
     | undefined;
   if (!other) return res.status(404).json({ error: "User not found" });
   const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
@@ -118,16 +161,17 @@ router.get("/:userId/messages", requireAuth, (req, res) => {
   params.push(limit);
   const rows = db
     .prepare(
-      `SELECT d.id, d.sender_id, d.recipient_id, u.username AS sender_name, d.content,
-              d.attachment_filename, d.attachment_original_name,
-              d.attachment_mime_type, d.attachment_size, d.created_at
-       FROM dms d JOIN users u ON u.id = d.sender_id
+      `SELECT ${SELECT_DM_COLS}
+       ${FROM_DM_JOINS}
        WHERE ${where}
        ORDER BY d.id DESC
        LIMIT ?`,
     )
     .all(...params) as DmRow[];
-  res.json({ peer: other, messages: rows.map(serialize) });
+  res.json({
+    peer: { id: other.id, username: other.username, lastSeen: other.last_seen_at },
+    messages: rows.map(serialize),
+  });
 });
 
 router.post(
@@ -138,7 +182,7 @@ router.post(
     upload.single("file")(req, res, (err) => {
       if (err) {
         if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
-          return res.status(413).json({ error: "File too large (max 10MB)" });
+          return res.status(413).json({ error: "File too large (max 100MB)" });
         }
         return res.status(400).json({ error: err.message ?? "Upload failed" });
       }
@@ -168,12 +212,27 @@ router.post(
     if (!content && !file) {
       return res.status(400).json({ error: "Message must have text or a file" });
     }
+
+    let replyToId: number | null = null;
+    if (req.body?.replyToId) {
+      const rid = Number(req.body.replyToId);
+      if (Number.isInteger(rid) && rid > 0) {
+        const exists = db
+          .prepare(
+            "SELECT 1 FROM dms WHERE id = ? AND ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?))",
+          )
+          .get(rid, userId, otherId, otherId, userId);
+        if (exists) replyToId = rid;
+      }
+    }
+
     const now = Date.now();
     const info = db
       .prepare(
         `INSERT INTO dms (sender_id, recipient_id, content, attachment_filename,
-                          attachment_original_name, attachment_mime_type, attachment_size, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                          attachment_original_name, attachment_mime_type, attachment_size,
+                          created_at, reply_to_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         userId,
@@ -184,18 +243,72 @@ router.post(
         file?.mimetype ?? null,
         file?.size ?? null,
         now,
+        replyToId,
       );
     const row = db
-      .prepare(
-        `SELECT d.id, d.sender_id, d.recipient_id, u.username AS sender_name, d.content,
-                d.attachment_filename, d.attachment_original_name,
-                d.attachment_mime_type, d.attachment_size, d.created_at
-         FROM dms d JOIN users u ON u.id = d.sender_id
-         WHERE d.id = ?`,
-      )
+      .prepare(`SELECT ${SELECT_DM_COLS} ${FROM_DM_JOINS} WHERE d.id = ?`)
       .get(Number(info.lastInsertRowid)) as DmRow;
     res.json(serialize(row));
   },
 );
+
+router.patch(
+  "/:userId/messages/:msgId",
+  requireAuth,
+  writeLimiter,
+  validateBody(editMessageSchema),
+  (req, res) => {
+    const userId = req.session.userId!;
+    const otherId = parseId(req.params.userId);
+    const msgId = parseId(req.params.msgId);
+    if (!otherId || !msgId) return res.status(400).json({ error: "Invalid id" });
+    const row = db
+      .prepare("SELECT sender_id, recipient_id FROM dms WHERE id = ?")
+      .get(msgId) as { sender_id: number; recipient_id: number } | undefined;
+    if (!row) return res.status(404).json({ error: "Not found" });
+    if (row.sender_id !== userId) {
+      return res.status(403).json({ error: "You can only edit your own messages" });
+    }
+    const inThread =
+      (row.sender_id === userId && row.recipient_id === otherId) ||
+      (row.sender_id === otherId && row.recipient_id === userId);
+    if (!inThread) return res.status(404).json({ error: "Not found" });
+    const { content } = (req as any).validated as { content: string };
+    db.prepare("UPDATE dms SET content = ?, edited_at = ? WHERE id = ?").run(
+      content,
+      Date.now(),
+      msgId,
+    );
+    const updated = db
+      .prepare(`SELECT ${SELECT_DM_COLS} ${FROM_DM_JOINS} WHERE d.id = ?`)
+      .get(msgId) as DmRow;
+    res.json(serialize(updated));
+  },
+);
+
+router.delete("/:userId/messages/:msgId", requireAuth, writeLimiter, (req, res) => {
+  const userId = req.session.userId!;
+  const otherId = parseId(req.params.userId);
+  const msgId = parseId(req.params.msgId);
+  if (!otherId || !msgId) return res.status(400).json({ error: "Invalid id" });
+  const row = db
+    .prepare(
+      "SELECT sender_id, recipient_id, attachment_filename FROM dms WHERE id = ?",
+    )
+    .get(msgId) as
+    | { sender_id: number; recipient_id: number; attachment_filename: string | null }
+    | undefined;
+  if (!row) return res.status(404).json({ error: "Not found" });
+  if (row.sender_id !== userId) {
+    return res.status(403).json({ error: "You can only delete your own messages" });
+  }
+  const inThread =
+    (row.sender_id === userId && row.recipient_id === otherId) ||
+    (row.sender_id === otherId && row.recipient_id === userId);
+  if (!inThread) return res.status(404).json({ error: "Not found" });
+  db.prepare("DELETE FROM dms WHERE id = ?").run(msgId);
+  maybeUnlinkAttachment(row.attachment_filename);
+  res.json({ ok: true });
+});
 
 export default router;

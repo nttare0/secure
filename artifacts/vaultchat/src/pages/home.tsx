@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useRooms } from "@/hooks/use-rooms";
-import { useMessages } from "@/hooks/use-messages";
+import { useMessages, type Message } from "@/hooks/use-messages";
 import { useDmThread } from "@/hooks/use-dms";
 import { useLocation } from "wouter";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -19,6 +19,7 @@ export default function Home() {
   const [, setLocation] = useLocation();
   const [selection, setSelection] = useState<Selection | undefined>();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [replyTo, setReplyTo] = useState<Message | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) setLocation("/login");
@@ -29,6 +30,11 @@ export default function Home() {
       setSelection({ type: "room", id: rooms[0].id });
     }
   }, [rooms, selection]);
+
+  // Clear reply when switching chats
+  useEffect(() => {
+    setReplyTo(null);
+  }, [selection?.type, selection && (selection.type === "room" ? selection.id : selection.userId)]);
 
   const handleSelect = (s: Selection) => {
     setSelection(s);
@@ -96,21 +102,45 @@ export default function Home() {
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/50" />
               </div>
             ) : (
-              <MessageList messages={roomMessages || []} />
+              <MessageList
+                messages={roomMessages || []}
+                context={{
+                  type: "room",
+                  id: currentRoom.id,
+                  ownerId: currentRoom.isOwner ? user.id : undefined,
+                }}
+                onReply={setReplyTo}
+              />
             )}
-            <Composer target={{ type: "room", id: currentRoom.id }} />
+            <Composer
+              target={{ type: "room", id: currentRoom.id }}
+              replyTo={replyTo}
+              onClearReply={() => setReplyTo(null)}
+            />
           </>
         ) : currentDmUserId && dmThread ? (
           <>
-            <DmHeader username={dmThread.peer.username} menuSlot={MenuButton} />
+            <DmHeader
+              username={dmThread.peer.username}
+              lastSeen={dmThread.peer.lastSeen}
+              menuSlot={MenuButton}
+            />
             {dmLoading ? (
               <div className="flex-1 flex items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground/50" />
               </div>
             ) : (
-              <MessageList messages={dmThread.messages} />
+              <MessageList
+                messages={dmThread.messages}
+                context={{ type: "dm", userId: currentDmUserId }}
+                onReply={setReplyTo}
+              />
             )}
-            <Composer target={{ type: "dm", userId: currentDmUserId }} />
+            <Composer
+              target={{ type: "dm", userId: currentDmUserId }}
+              replyTo={replyTo}
+              onClearReply={() => setReplyTo(null)}
+            />
           </>
         ) : currentDmUserId ? (
           <div className="flex-1 flex items-center justify-center">

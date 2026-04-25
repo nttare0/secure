@@ -16,6 +16,7 @@ export const passwordSchema = z
 export const credentialsSchema = z.object({
   username: usernameSchema,
   password: passwordSchema,
+  rememberMe: z.boolean().optional().default(true),
 });
 
 export const registerSchema = z.object({
@@ -60,6 +61,26 @@ export const filenameSchema = z
   .min(1)
   .max(128)
   .regex(/^[A-Za-z0-9.]+$/, "Invalid filename");
+
+export const forwardSchema = z.object({
+  source: z.object({
+    type: z.enum(["room", "dm"]),
+    messageId: z.number().int().positive(),
+  }),
+  targets: z
+    .array(
+      z.object({
+        type: z.enum(["room", "dm"]),
+        id: z.number().int().positive(),
+      }),
+    )
+    .min(1, "Pick at least one destination")
+    .max(20, "Too many destinations"),
+});
+
+export const editMessageSchema = z.object({
+  content: z.string().trim().min(1, "Message cannot be empty").max(4000, "Message too long"),
+});
 
 export function formatZodError(err: z.ZodError): string {
   return err.issues.map((i) => i.message).join("; ") || "Invalid input";

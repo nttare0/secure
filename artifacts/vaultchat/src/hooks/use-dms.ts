@@ -7,22 +7,25 @@ export interface DmConversation {
   username: string;
   lastMessageAt: number | null;
   lastMessage: string | null;
+  lastSeen: number | null;
 }
 
 export interface DmThread {
-  peer: { id: number; username: string };
+  peer: { id: number; username: string; lastSeen: number | null };
   messages: Message[];
 }
 
 export interface DmUser {
   id: number;
   username: string;
+  lastSeen?: number | null;
 }
 
 export function useDms() {
   return useQuery({
     queryKey: ["dms"],
     queryFn: () => fetchApi<DmConversation[]>("/dms"),
+    refetchInterval: 5000,
   });
 }
 
@@ -43,13 +46,21 @@ export function useSearchUsers(query: string) {
   });
 }
 
+export interface SendDmVars {
+  userId: number;
+  content?: string;
+  file?: File;
+  replyToId?: number;
+}
+
 export function useSendDm() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ userId, content, file }: { userId: number; content?: string; file?: File }) => {
+    mutationFn: ({ userId, content, file, replyToId }: SendDmVars) => {
       const formData = new FormData();
       if (content) formData.append("content", content);
       if (file) formData.append("file", file);
+      if (replyToId) formData.append("replyToId", String(replyToId));
       return fetchApi<Message>(`/dms/${userId}/messages`, {
         method: "POST",
         body: formData,
@@ -67,6 +78,47 @@ export function useSendDm() {
         };
       });
       queryClient.invalidateQueries({ queryKey: ["dms"] });
+    },
+  });
+}
+
+export function useEditDm() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, messageId, content }: { userId: number; messageId: number; content: string }) =>
+      fetchApi<Message>(`/dms/${userId}/messages/${messageId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ content }),
+      }),
+    onSuccess: (updated, variables) => {
+      queryClient.setQueryData<DmThread>(["dms", variables.userId, "messages"], (old) =>
+        old
+          ? {
+              ...old,
+              messages: old.messages.map((m) => (m.id === updated.id ? updated : m)),
+            }
+          : old,
+      );
+    },
+  });
+}
+
+export function useDeleteDm() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ userId, messageId }: { userId: number; messageId: number }) =>
+      fetchApi<{ ok: boolean }>(`/dms/${userId}/messages/${messageId}`, {
+        method: "DELETE",
+      }),
+    onSuccess: (_data, variables) => {
+      queryClient.setQueryData<DmThread>(["dms", variables.userId, "messages"], (old) =>
+        old
+          ? {
+              ...old,
+              messages: old.messages.filter((m) => m.id !== variables.messageId),
+            }
+          : old,
+      );
     },
   });
 }

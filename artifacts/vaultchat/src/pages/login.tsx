@@ -21,6 +21,7 @@ export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
@@ -62,7 +63,7 @@ export default function Login() {
     const onSuccess = () => setLocation("/");
 
     if (isLogin) {
-      login.mutate({ username, password }, { onSuccess, onError });
+      login.mutate({ username, password, rememberMe }, { onSuccess, onError });
     } else {
       register.mutate({ username, password, acceptedTerms }, { onSuccess, onError });
     }
@@ -127,6 +128,20 @@ export default function Login() {
                   className="bg-background"
                 />
               </div>
+
+              {isLogin && (
+                <div className="flex items-center gap-2 pt-1">
+                  <Checkbox
+                    id="remember"
+                    checked={rememberMe}
+                    onCheckedChange={(v) => setRememberMe(v === true)}
+                    disabled={isPending}
+                  />
+                  <Label htmlFor="remember" className="text-sm font-normal cursor-pointer">
+                    Remember me on this device
+                  </Label>
+                </div>
+              )}
 
               {!isLogin && (
                 <div className="flex items-start gap-2 pt-1">

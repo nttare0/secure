@@ -20,7 +20,8 @@ db.exec(`
     password_hash TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     is_admin INTEGER NOT NULL DEFAULT 0,
-    is_disabled INTEGER NOT NULL DEFAULT 0
+    is_disabled INTEGER NOT NULL DEFAULT 0,
+    last_seen_at INTEGER
   );
 
   CREATE TABLE IF NOT EXISTS rooms (
@@ -47,9 +48,13 @@ db.exec(`
     attachment_original_name TEXT,
     attachment_mime_type TEXT,
     attachment_size INTEGER,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    edited_at INTEGER,
+    reply_to_id INTEGER,
+    forwarded_from_username TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_messages_room_id ON messages(room_id, id);
+  CREATE INDEX IF NOT EXISTS idx_messages_attachment ON messages(attachment_filename);
 
   CREATE TABLE IF NOT EXISTS dms (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,10 +65,14 @@ db.exec(`
     attachment_original_name TEXT,
     attachment_mime_type TEXT,
     attachment_size INTEGER,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    edited_at INTEGER,
+    reply_to_id INTEGER,
+    forwarded_from_username TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_dms_pair ON dms(sender_id, recipient_id, id);
   CREATE INDEX IF NOT EXISTS idx_dms_recipient ON dms(recipient_id, id);
+  CREATE INDEX IF NOT EXISTS idx_dms_attachment ON dms(attachment_filename);
 `);
 
 function hasColumn(table: string, column: string): boolean {
@@ -75,4 +84,18 @@ if (!hasColumn("users", "is_admin")) {
 }
 if (!hasColumn("users", "is_disabled")) {
   db.exec("ALTER TABLE users ADD COLUMN is_disabled INTEGER NOT NULL DEFAULT 0;");
+}
+if (!hasColumn("users", "last_seen_at")) {
+  db.exec("ALTER TABLE users ADD COLUMN last_seen_at INTEGER;");
+}
+for (const table of ["messages", "dms"] as const) {
+  if (!hasColumn(table, "edited_at")) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN edited_at INTEGER;`);
+  }
+  if (!hasColumn(table, "reply_to_id")) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN reply_to_id INTEGER;`);
+  }
+  if (!hasColumn(table, "forwarded_from_username")) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN forwarded_from_username TEXT;`);
+  }
 }

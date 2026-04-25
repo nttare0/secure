@@ -18,7 +18,7 @@ export function useAuth() {
 export function useLogin() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { username: string; password: string }) => 
+    mutationFn: (data: { username: string; password: string; rememberMe?: boolean }) =>
       fetchApi<{ user: User }>('/auth/login', {
         method: 'POST',
         body: JSON.stringify(data),

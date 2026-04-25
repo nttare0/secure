@@ -210,6 +210,7 @@ export function Sidebar({ selection, onSelect, isOpen, onClose }: SidebarProps) 
             <div className="space-y-1">
               {dms.map((c) => {
                 const active = selection?.type === "dm" && selection.userId === c.userId;
+                const isOnline = !!c.lastSeen && Date.now() - c.lastSeen < 60 * 1000;
                 return (
                   <button
                     key={c.userId}
@@ -221,13 +222,23 @@ export function Sidebar({ selection, onSelect, isOpen, onClose }: SidebarProps) 
                         : "hover:bg-sidebar-accent/50 text-sidebar-foreground/80 hover:text-sidebar-foreground",
                     )}
                   >
-                    <div
-                      className={cn(
-                        "h-10 w-10 rounded-full flex items-center justify-center shrink-0 mt-0.5 font-medium",
-                        active ? "bg-primary text-primary-foreground" : "bg-secondary text-secondary-foreground",
+                    <div className="relative shrink-0 mt-0.5">
+                      <div
+                        className={cn(
+                          "h-10 w-10 rounded-full flex items-center justify-center font-medium",
+                          active
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-secondary text-secondary-foreground",
+                        )}
+                      >
+                        {c.username.charAt(0).toUpperCase()}
+                      </div>
+                      {isOnline && (
+                        <span
+                          className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-sidebar"
+                          aria-label="Online"
+                        />
                       )}
-                    >
-                      {c.username.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 overflow-hidden">
                       <span className="truncate block">{c.username}</span>
@@ -236,7 +247,11 @@ export function Sidebar({ selection, onSelect, isOpen, onClose }: SidebarProps) 
                           ? c.lastMessage
                           : c.lastMessageAt
                             ? formatDistanceToNow(new Date(c.lastMessageAt), { addSuffix: true })
-                            : "No messages yet"}
+                            : isOnline
+                              ? "Online now"
+                              : c.lastSeen
+                                ? `Last seen ${formatDistanceToNow(new Date(c.lastSeen), { addSuffix: true })}`
+                                : "No messages yet"}
                       </span>
                     </div>
                   </button>
