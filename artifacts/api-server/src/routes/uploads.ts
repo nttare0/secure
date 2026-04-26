@@ -9,7 +9,30 @@ const router: IRouter = Router();
 
 router.get("/:filename", requireAuth, (req, res) => {
   const userId = req.session.userId!;
-  const parsed = filenameSchema.safeParse(req.params.filename);
+  const rawName = String(req.params.filename || "");
+
+  // Avatar files are publicly viewable by any signed-in user.
+  if (/^avatar-[A-Za-z0-9]+\.(png|jpg|jpeg|webp|gif)$/i.test(rawName)) {
+    const avatarPath = path.join(uploadsDir, rawName);
+    if (!fs.existsSync(avatarPath)) {
+      return res.status(404).json({ error: "Avatar not found" });
+    }
+    const ext = path.extname(rawName).slice(1).toLowerCase();
+    const mime =
+      ext === "png"
+        ? "image/png"
+        : ext === "webp"
+          ? "image/webp"
+          : ext === "gif"
+            ? "image/gif"
+            : "image/jpeg";
+    res.setHeader("Content-Type", mime);
+    res.setHeader("Cache-Control", "private, max-age=86400");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    return res.sendFile(avatarPath);
+  }
+
+  const parsed = filenameSchema.safeParse(rawName);
   if (!parsed.success) {
     return res.status(400).json({ error: "Invalid filename" });
   }

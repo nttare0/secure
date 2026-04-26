@@ -96,6 +96,13 @@ export const avatarPresetIdSchema = z
   .max(40)
   .regex(/^[A-Za-z0-9_-]+$/, "Invalid avatar id");
 
+const uploadedAvatarUrlSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(256)
+  .regex(/^\/api\/uploads\/avatar-[A-Za-z0-9.]+$/, "Invalid uploaded avatar url");
+
 export const updateSettingsSchema = z
   .object({
     wallpaperId: z.union([wallpaperIdSchema, z.null()]).optional(),
@@ -103,12 +110,28 @@ export const updateSettingsSchema = z
       .union([
         z.object({ kind: z.literal("initials") }),
         z.object({ kind: z.literal("preset"), id: avatarPresetIdSchema }),
+        z.object({ kind: z.literal("anime"), id: avatarPresetIdSchema }),
+        z.object({ kind: z.literal("image"), url: uploadedAvatarUrlSchema }),
       ])
       .optional(),
   })
   .refine((v) => v.wallpaperId !== undefined || v.avatar !== undefined, {
     message: "Nothing to update",
   });
+
+export const passwordChangeSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Current password is required").max(200),
+    newPassword: passwordSchema,
+  })
+  .refine((v) => v.currentPassword !== v.newPassword, {
+    message: "New password must be different from current password",
+    path: ["newPassword"],
+  });
+
+export const adminPasswordResetSchema = z.object({
+  newPassword: passwordSchema,
+});
 
 export function formatZodError(err: z.ZodError): string {
   return err.issues.map((i) => i.message).join("; ") || "Invalid input";

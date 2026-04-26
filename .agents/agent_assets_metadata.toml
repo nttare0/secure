@@ -1,0 +1,62 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "1hvjBjE2kVK6KRf2VK3YT"
+uri = "file://artifacts/vaultchat/public/avatars/naruto.png"
+type = "image"
+title = "naruto anime avatar"
+
+[[generated]]
+id = "l8lc-nlBU--HGyRSFEePz"
+uri = "file://artifacts/vaultchat/public/avatars/sasuke.png"
+type = "image"
+title = "sasuke anime avatar"
+
+[[generated]]
+id = "EeRTgeaRXTyG9jqV0THNP"
+uri = "file://artifacts/vaultchat/public/avatars/kakashi.png"
+type = "image"
+title = "kakashi anime avatar"
+
+[[generated]]
+id = "oz1O_ak7LYVZFpk1s7naA"
+uri = "file://artifacts/vaultchat/public/avatars/itachi.png"
+type = "image"
+title = "itachi anime avatar"
+
+[[generated]]
+id = "UpviuCDEjoqrxlTl2V9DH"
+uri = "file://artifacts/vaultchat/public/avatars/goku.png"
+type = "image"
+title = "goku anime avatar"
+
+[[generated]]
+id = "sp-ubd3KfmZukEORsjzNI"
+uri = "file://artifacts/vaultchat/public/avatars/vegeta.png"
+type = "image"
+title = "vegeta anime avatar"
+
+[[generated]]
+id = "9UgpiN2cYrRrpMVyLoo09"
+uri = "file://artifacts/vaultchat/public/avatars/gohan.png"
+type = "image"
+title = "gohan anime avatar"
+
+[[generated]]
+id = "jImrbwjhVmn6dwoDHqBvN"
+uri = "file://artifacts/vaultchat/public/avatars/tanjiro.png"
+type = "image"
+title = "tanjiro anime avatar"
+
+[[generated]]
+id = "pTEAaxRVu6no_l8E4Npar"
+uri = "file://artifacts/vaultchat/public/avatars/nezuko.png"
+type = "image"
+title = "nezuko anime avatar"
+
+[[generated]]
+id = "BoHt6eVcdv26fKwnUrV8G"
+uri = "file://artifacts/vaultchat/public/avatars/zenitsu.png"
+type = "image"
+title = "zenitsu anime avatar"

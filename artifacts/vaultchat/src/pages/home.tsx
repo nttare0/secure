@@ -111,6 +111,11 @@ export default function Home() {
         backgroundAttachment: "scroll",
       }
     : undefined;
+  // When a wallpaper is set, give the room/dm header a subtle translucent background
+  // so it doesn't pop with a solid color over the chosen image.
+  const wallpaperHeaderStyle: React.CSSProperties | undefined = wallpaper
+    ? { background: "transparent" }
+    : undefined;
 
   const dmIsOnline = currentDmUserId
     ? onlineUsers.has(currentDmUserId) ||
@@ -141,7 +146,7 @@ export default function Home() {
         style={chatBgStyle}
       >
         {wallpaper && (
-          <div className="pointer-events-none absolute inset-0 bg-background/60 dark:bg-background/70" aria-hidden />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-background/30 via-background/20 to-background/40 dark:from-background/40 dark:via-background/30 dark:to-background/55" aria-hidden />
         )}
         <div className="relative flex-1 flex flex-col min-h-0">
         {currentRoom ? (

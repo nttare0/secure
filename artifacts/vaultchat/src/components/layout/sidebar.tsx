@@ -30,6 +30,8 @@ import {
   Search,
   X,
   Settings as SettingsIcon,
+  Users as UsersIcon,
+  Circle,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
@@ -113,6 +115,12 @@ export function Sidebar({ selection, onSelect, isOpen, onClose, onlineUsers, onO
     toast({ title: "Opened conversation", description: `with ${username}` });
   };
 
+  const onlineDmCount = (dms || []).filter(
+    (c: any) =>
+      onlineUsers?.has(c.userId) ||
+      (!!c.lastSeen && Date.now() - c.lastSeen < 60 * 1000),
+  ).length;
+
   return (
     <div
       className={cn(
@@ -148,8 +156,17 @@ export function Sidebar({ selection, onSelect, isOpen, onClose, onlineUsers, onO
             <TabsTrigger value="rooms" className="gap-1.5">
               <Hash className="h-3.5 w-3.5" /> Rooms
             </TabsTrigger>
-            <TabsTrigger value="direct" className="gap-1.5">
+            <TabsTrigger value="direct" className="gap-1.5 relative">
               <MessageSquare className="h-3.5 w-3.5" /> Direct
+              {onlineDmCount > 0 && (
+                <span
+                  className="ml-0.5 inline-flex items-center gap-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
+                  title={`${onlineDmCount} online`}
+                >
+                  <Circle className="h-1.5 w-1.5 fill-current" />
+                  {onlineDmCount}
+                </span>
+              )}
             </TabsTrigger>
           </TabsList>
         </div>
@@ -188,10 +205,17 @@ export function Sidebar({ selection, onSelect, isOpen, onClose, onlineUsers, onO
                     </div>
                     <div className="flex-1 overflow-hidden">
                       <span className="truncate block">{room.name}</span>
-                      <span className="text-xs text-sidebar-foreground/50 truncate block mt-0.5">
-                        {room.lastMessageAt
-                          ? formatDistanceToNow(new Date(room.lastMessageAt), { addSuffix: true })
-                          : "No messages"}
+                      <span className="text-xs text-sidebar-foreground/50 truncate block mt-0.5 flex items-center gap-1.5">
+                        <span className="inline-flex items-center gap-0.5">
+                          <UsersIcon className="h-3 w-3" />
+                          {room.memberCount}
+                        </span>
+                        <span aria-hidden>·</span>
+                        <span className="truncate">
+                          {room.lastMessageAt
+                            ? formatDistanceToNow(new Date(room.lastMessageAt), { addSuffix: true })
+                            : "No messages"}
+                        </span>
                       </span>
                     </div>
                   </button>

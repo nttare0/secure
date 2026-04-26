@@ -1,8 +1,17 @@
 import { Router, type IRouter } from "express";
-import { db } from "../lib/db";
+import multer from "multer";
+import path from "node:path";
+import fs from "node:fs";
+import crypto from "node:crypto";
+import bcrypt from "bcryptjs";
+import { db, uploadsDir } from "../lib/db";
 import { requireAuth } from "../lib/auth";
-import { writeLimiter } from "../lib/rate-limit";
-import { updateSettingsSchema, validateBody } from "../lib/validation";
+import { writeLimiter, authLimiter } from "../lib/rate-limit";
+import {
+  updateSettingsSchema,
+  passwordChangeSchema,
+  validateBody,
+} from "../lib/validation";
 import { isUserOnline, emitToAll } from "../lib/realtime";
 
 const router: IRouter = Router();
@@ -53,7 +62,11 @@ router.patch(
     const userId = req.session.userId!;
     const { wallpaperId, avatar } = (req as any).validated as {
       wallpaperId?: string | null;
-      avatar?: { kind: "initials" } | { kind: "preset"; id: string };
+      avatar?:
+        | { kind: "initials" }
+        | { kind: "preset"; id: string }
+        | { kind: "anime"; id: string }
+        | { kind: "image"; url: string };
     };
     const sets: string[] = [];
     const params: (string | null)[] = [];
@@ -65,7 +78,13 @@ router.patch(
       sets.push("avatar_kind = ?");
       params.push(avatar.kind);
       sets.push("avatar_value = ?");
-      params.push(avatar.kind === "preset" ? avatar.id : null);
+      if (avatar.kind === "preset" || avatar.kind === "anime") {
+        params.push(avatar.id);
+      } else if (avatar.kind === "image") {
+        params.push(avatar.url);
+      } else {
+        params.push(null);
+      }
     }
     if (sets.length === 0) return res.status(400).json({ error: "Nothing to update" });
     db.prepare(`UPDATE users SET ${sets.join(", ")} WHERE id = ?`).run(...params, userId);
@@ -79,6 +98,103 @@ router.patch(
       });
     }
     res.json(serialize(u));
+  },
+);
+
+const avatarStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadsDir),
+  filename: (_req, file, cb) => {
+    const ext = (path.extname(file.originalname) || ".png")
+      .slice(0, 8)
+      .replace(/[^A-Za-z0-9.]/g, "")
+      .toLowerCase();
+    const id = crypto.randomBytes(12).toString("hex");
+    cb(null, `avatar-${id}${ext}`);
+  },
+});
+
+const MAX_AVATAR_BYTES = 4 * 1024 * 1024; // 4MB
+
+const avatarUpload = multer({
+  storage: avatarStorage,
+  limits: { fileSize: MAX_AVATAR_BYTES, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if (!/^image\/(png|jpeg|jpg|webp|gif)$/.test(file.mimetype)) {
+      return cb(new Error("Only PNG, JPEG, WebP or GIF images are allowed"));
+    }
+    cb(null, true);
+  },
+});
+
+router.post(
+  "/me/avatar",
+  requireAuth,
+  writeLimiter,
+  (req, res, next) => {
+    avatarUpload.single("file")(req, res, (err: any) => {
+      if (err) {
+        return res
+          .status(400)
+          .json({ error: err.message || "Could not upload avatar" });
+      }
+      next();
+    });
+  },
+  (req, res) => {
+    const userId = req.session.userId!;
+    const file = (req as any).file as Express.Multer.File | undefined;
+    if (!file) return res.status(400).json({ error: "No file uploaded" });
+    const url = `/api/uploads/${file.filename}`;
+
+    // Clean up the previous uploaded avatar if any.
+    const prev = db
+      .prepare("SELECT avatar_kind, avatar_value FROM users WHERE id = ?")
+      .get(userId) as { avatar_kind: string; avatar_value: string | null } | undefined;
+    if (prev?.avatar_kind === "image" && prev.avatar_value) {
+      const oldName = prev.avatar_value.split("/").pop();
+      if (oldName && /^avatar-[A-Za-z0-9.]+$/.test(oldName)) {
+        const p = path.join(uploadsDir, oldName);
+        fs.promises.unlink(p).catch(() => undefined);
+      }
+    }
+
+    db.prepare("UPDATE users SET avatar_kind = ?, avatar_value = ? WHERE id = ?").run(
+      "image",
+      url,
+      userId,
+    );
+    const u = loadUser(userId)!;
+    emitToAll({
+      type: "user:profile",
+      userId: u.id,
+      username: u.username,
+      avatar: { kind: u.avatar_kind, value: u.avatar_value },
+    });
+    res.json(serialize(u));
+  },
+);
+
+router.post(
+  "/me/password",
+  requireAuth,
+  authLimiter,
+  validateBody(passwordChangeSchema),
+  (req, res) => {
+    const userId = req.session.userId!;
+    const { currentPassword, newPassword } = (req as any).validated as {
+      currentPassword: string;
+      newPassword: string;
+    };
+    const row = db
+      .prepare("SELECT password_hash FROM users WHERE id = ?")
+      .get(userId) as { password_hash: string } | undefined;
+    if (!row) return res.status(404).json({ error: "User not found" });
+    if (!bcrypt.compareSync(currentPassword, row.password_hash)) {
+      return res.status(401).json({ error: "Current password is incorrect" });
+    }
+    const hash = bcrypt.hashSync(newPassword, 12);
+    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hash, userId);
+    res.json({ ok: true });
   },
 );
 

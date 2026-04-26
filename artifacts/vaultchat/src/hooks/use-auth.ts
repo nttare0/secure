@@ -7,6 +7,7 @@ export interface User {
   isAdmin?: boolean;
   avatar?: { kind: string; value: string | null };
   wallpaperId?: string | null;
+  createdAt?: number;
 }
 
 export function useAuth() {
