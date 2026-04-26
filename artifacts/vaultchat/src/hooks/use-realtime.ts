@@ -15,6 +15,8 @@ export interface TypingPeer {
 
 const TYPING_TTL = 4000;
 
+type EventListener = (evt: { type: string; [k: string]: any }) => void;
+
 export function useRealtime({ enabled, myUserId }: RealtimeOptions) {
   const qc = useQueryClient();
   const wsRef = useRef<WebSocket | null>(null);
@@ -22,6 +24,7 @@ export function useRealtime({ enabled, myUserId }: RealtimeOptions) {
   const [typing, setTyping] = useState<TypingPeer[]>([]);
   const [onlineUsers, setOnlineUsers] = useState<Set<number>>(new Set());
   const reconnectAttempts = useRef(0);
+  const listenersRef = useRef<Set<EventListener>>(new Set());
 
   // GC stale typers
   useEffect(() => {
@@ -69,6 +72,13 @@ export function useRealtime({ enabled, myUserId }: RealtimeOptions) {
         try {
           const evt = JSON.parse(e.data) as { type: string; [k: string]: any };
           handleEvent(evt);
+          for (const cb of listenersRef.current) {
+            try {
+              cb(evt);
+            } catch {
+              /* listener errors must not break the socket loop */
+            }
+          }
         } catch {
           /* ignore */
         }
@@ -164,7 +174,25 @@ export function useRealtime({ enabled, myUserId }: RealtimeOptions) {
     [],
   );
 
-  return { connected, typing, onlineUsers, sendTyping };
+  const send = useCallback((evt: Record<string, unknown>) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== ws.OPEN) return false;
+    try {
+      ws.send(JSON.stringify(evt));
+      return true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const subscribe = useCallback((cb: EventListener) => {
+    listenersRef.current.add(cb);
+    return () => {
+      listenersRef.current.delete(cb);
+    };
+  }, []);
+
+  return { connected, typing, onlineUsers, sendTyping, send, subscribe };
 }
 
 export function getTypingFor(

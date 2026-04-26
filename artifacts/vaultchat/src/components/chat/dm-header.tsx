@@ -1,6 +1,7 @@
-import { Shield, Circle } from "lucide-react";
+import { Shield, Circle, Phone, Video } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Avatar, type AvatarSpec } from "@/components/avatar";
+import { Button } from "@/components/ui/button";
 
 interface DmHeaderProps {
   username: string;
@@ -9,6 +10,9 @@ interface DmHeaderProps {
   isOnline?: boolean;
   typingLabel?: string | null;
   menuSlot?: React.ReactNode;
+  onAudioCall?: () => void;
+  onVideoCall?: () => void;
+  callDisabled?: boolean;
 }
 
 const ONLINE_WINDOW_MS = 60 * 1000; // 60s = "online"
@@ -20,6 +24,9 @@ export function DmHeader({
   isOnline: isOnlineProp,
   typingLabel,
   menuSlot,
+  onAudioCall,
+  onVideoCall,
+  callDisabled,
 }: DmHeaderProps) {
   const recentlySeen = !!lastSeen && Date.now() - lastSeen < ONLINE_WINDOW_MS;
   const isOnline = isOnlineProp ?? recentlySeen;
@@ -76,6 +83,38 @@ export function DmHeader({
           </div>
         </div>
       </div>
+      {(onAudioCall || onVideoCall) && (
+        <div className="flex items-center gap-1 shrink-0">
+          {onAudioCall && (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              onClick={onAudioCall}
+              disabled={callDisabled}
+              aria-label={`Audio call ${username}`}
+              title="Audio call"
+              className="h-9 w-9 rounded-full text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10"
+            >
+              <Phone className="h-4 w-4" />
+            </Button>
+          )}
+          {onVideoCall && (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              onClick={onVideoCall}
+              disabled={callDisabled}
+              aria-label={`Video call ${username}`}
+              title="Video call"
+              className="h-9 w-9 rounded-full text-primary hover:bg-primary/10"
+            >
+              <Video className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

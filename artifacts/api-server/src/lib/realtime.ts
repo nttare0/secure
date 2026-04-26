@@ -231,5 +231,23 @@ function handleClientMessage(s: AuthedSocket, evt: RealtimeEvent): void {
         at: Date.now(),
       });
     }
+    return;
+  }
+
+  // WebRTC call signaling — relay any `call:*` event to the named recipient,
+  // stamped with the sender's id and username so the client can verify identity.
+  if (typeof evt.type === "string" && evt.type.startsWith("call:")) {
+    const to = Number((evt as { to?: unknown }).to);
+    if (!Number.isFinite(to) || to === s.userId) return;
+    const exists = db.prepare("SELECT 1 AS one FROM users WHERE id = ?").get(to);
+    if (!exists) return;
+    const { to: _omit, ...rest } = evt as Record<string, unknown>;
+    emitToUser(to, {
+      ...rest,
+      type: evt.type,
+      from: s.userId,
+      fromUsername: s.username,
+      at: Date.now(),
+    });
   }
 }

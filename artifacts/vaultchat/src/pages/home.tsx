@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Shield, Loader2, Menu } from "lucide-react";
 import type { Selection } from "@/lib/selection";
 import { useRealtime, getTypingFor } from "@/hooks/use-realtime";
+import { useCall } from "@/hooks/use-call";
+import { CallDialog } from "@/components/call/call-dialog";
 import { wallpaperUrl } from "@/lib/wallpapers";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 
@@ -32,9 +34,16 @@ export default function Home() {
   const [replyTo, setReplyTo] = useState<Message | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const { typing, onlineUsers, sendTyping } = useRealtime({
+  const { typing, onlineUsers, sendTyping, send, subscribe } = useRealtime({
     enabled: !!user,
     myUserId: user?.id,
+  });
+
+  const callApi = useCall({
+    enabled: !!user,
+    myUserId: user?.id ?? null,
+    send,
+    subscribe,
   });
 
   useEffect(() => {
@@ -188,6 +197,23 @@ export default function Home() {
               isOnline={dmIsOnline}
               typingLabel={dmTypingLabel}
               menuSlot={MenuButton}
+              callDisabled={
+                callApi.call.status !== "idle" && callApi.call.status !== "ended"
+              }
+              onAudioCall={() =>
+                callApi.startCall(
+                  dmThread.peer.id,
+                  dmThread.peer.username,
+                  "audio",
+                )
+              }
+              onVideoCall={() =>
+                callApi.startCall(
+                  dmThread.peer.id,
+                  dmThread.peer.username,
+                  "video",
+                )
+              }
             />
             {dmLoading ? (
               <div className="flex-1 flex items-center justify-center">
@@ -234,6 +260,19 @@ export default function Home() {
       </main>
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+
+      <CallDialog
+        call={callApi.call}
+        localStream={callApi.localStream}
+        remoteStream={callApi.remoteStream}
+        muted={callApi.muted}
+        cameraOff={callApi.cameraOff}
+        onAccept={callApi.accept}
+        onDecline={callApi.decline}
+        onHangUp={callApi.hangUp}
+        onToggleMute={callApi.toggleMute}
+        onToggleCamera={callApi.toggleCamera}
+      />
     </div>
   );
 }
