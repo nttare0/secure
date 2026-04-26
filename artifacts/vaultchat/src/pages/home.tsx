@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useRooms } from "@/hooks/use-rooms";
 import { useMessages, type Message } from "@/hooks/use-messages";
@@ -12,6 +12,16 @@ import { DmHeader } from "@/components/chat/dm-header";
 import { Button } from "@/components/ui/button";
 import { Shield, Loader2, Menu } from "lucide-react";
 import type { Selection } from "@/lib/selection";
+import { useRealtime, getTypingFor } from "@/hooks/use-realtime";
+import { wallpaperUrl } from "@/lib/wallpapers";
+import { SettingsDialog } from "@/components/settings/settings-dialog";
+
+function buildTypingLabel(names: string[]): string | null {
+  if (names.length === 0) return null;
+  if (names.length === 1) return `${names[0]} is typing…`;
+  if (names.length === 2) return `${names[0]} and ${names[1]} are typing…`;
+  return `${names[0]}, ${names[1]} and ${names.length - 2} more are typing…`;
+}
 
 export default function Home() {
   const { data: user, isLoading: authLoading } = useAuth();
@@ -20,6 +30,12 @@ export default function Home() {
   const [selection, setSelection] = useState<Selection | undefined>();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const { typing, onlineUsers, sendTyping } = useRealtime({
+    enabled: !!user,
+    myUserId: user?.id,
+  });
 
   useEffect(() => {
     if (!authLoading && !user) setLocation("/login");
@@ -52,6 +68,20 @@ export default function Home() {
   const { data: roomMessages, isLoading: roomMessagesLoading } = useMessages(currentRoomId);
   const { data: dmThread, isLoading: dmLoading } = useDmThread(currentDmUserId);
 
+  const wallpaper = useMemo(() => wallpaperUrl(user?.wallpaperId), [user?.wallpaperId]);
+
+  const roomTypingLabel = useMemo(() => {
+    if (!currentRoomId) return null;
+    const peers = getTypingFor(typing, { type: "room", id: currentRoomId });
+    return buildTypingLabel(peers.map((p) => p.username));
+  }, [typing, currentRoomId]);
+
+  const dmTypingLabel = useMemo(() => {
+    if (!currentDmUserId) return null;
+    const peers = getTypingFor(typing, { type: "dm", id: currentDmUserId });
+    return buildTypingLabel(peers.map((p) => p.username));
+  }, [typing, currentDmUserId]);
+
   if (authLoading || !user) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-background">
@@ -72,6 +102,21 @@ export default function Home() {
     </Button>
   );
 
+  const chatBgStyle: React.CSSProperties | undefined = wallpaper
+    ? {
+        backgroundImage: `url(${wallpaper})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundRepeat: "no-repeat",
+        backgroundAttachment: "scroll",
+      }
+    : undefined;
+
+  const dmIsOnline = currentDmUserId
+    ? onlineUsers.has(currentDmUserId) ||
+      (!!dmThread?.peer.lastSeen && Date.now() - dmThread.peer.lastSeen < 60_000)
+    : false;
+
   return (
     <div className="h-screen w-full flex bg-background overflow-hidden selection:bg-primary/20">
       {sidebarOpen && (
@@ -87,15 +132,25 @@ export default function Home() {
         onSelect={handleSelect}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        onlineUsers={onlineUsers}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
 
-      <main className="flex-1 flex flex-col min-w-0 bg-background/50 relative">
+      <main
+        className="flex-1 flex flex-col min-w-0 bg-background/50 relative"
+        style={chatBgStyle}
+      >
+        {wallpaper && (
+          <div className="pointer-events-none absolute inset-0 bg-background/60 dark:bg-background/70" aria-hidden />
+        )}
+        <div className="relative flex-1 flex flex-col min-h-0">
         {currentRoom ? (
           <>
             <RoomHeader
               room={currentRoom}
               onClearSelection={handleClearSelection}
               menuSlot={MenuButton}
+              typingLabel={roomTypingLabel}
             />
             {roomMessagesLoading ? (
               <div className="flex-1 flex items-center justify-center">
@@ -116,6 +171,7 @@ export default function Home() {
               target={{ type: "room", id: currentRoom.id }}
               replyTo={replyTo}
               onClearReply={() => setReplyTo(null)}
+              onTyping={() => sendTyping({ type: "room", id: currentRoom.id })}
             />
           </>
         ) : currentDmUserId && dmThread ? (
@@ -123,6 +179,9 @@ export default function Home() {
             <DmHeader
               username={dmThread.peer.username}
               lastSeen={dmThread.peer.lastSeen}
+              avatar={(dmThread.peer as any).avatar ?? null}
+              isOnline={dmIsOnline}
+              typingLabel={dmTypingLabel}
               menuSlot={MenuButton}
             />
             {dmLoading ? (
@@ -140,6 +199,7 @@ export default function Home() {
               target={{ type: "dm", userId: currentDmUserId }}
               replyTo={replyTo}
               onClearReply={() => setReplyTo(null)}
+              onTyping={() => sendTyping({ type: "dm", id: currentDmUserId })}
             />
           </>
         ) : currentDmUserId ? (
@@ -148,11 +208,11 @@ export default function Home() {
           </div>
         ) : (
           <>
-            <div className="h-14 sm:h-16 border-b border-border/50 flex items-center px-4 sm:px-6 md:hidden">
+            <div className="h-14 sm:h-16 border-b border-border/50 flex items-center px-4 sm:px-6 md:hidden bg-background/95 backdrop-blur">
               {MenuButton}
               <span className="ml-2 font-semibold text-foreground">VaultChat</span>
             </div>
-            <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-8 text-center bg-background">
+            <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-8 text-center">
               <div className="h-16 w-16 sm:h-20 sm:w-20 bg-primary/5 rounded-2xl flex items-center justify-center mb-5 sm:mb-6 border border-primary/10 shadow-inner">
                 <Shield className="h-8 w-8 sm:h-10 sm:w-10 text-primary/40" />
               </div>
@@ -165,7 +225,10 @@ export default function Home() {
             </div>
           </>
         )}
+        </div>
       </main>
+
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </div>
   );
 }

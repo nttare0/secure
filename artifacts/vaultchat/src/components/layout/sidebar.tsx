@@ -29,19 +29,23 @@ import {
   KeyRound,
   Search,
   X,
+  Settings as SettingsIcon,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { Avatar } from "@/components/avatar";
 
 interface SidebarProps {
   selection?: Selection;
   onSelect: (s: Selection) => void;
   isOpen?: boolean;
   onClose?: () => void;
+  onlineUsers?: Set<number>;
+  onOpenSettings?: () => void;
 }
 
-export function Sidebar({ selection, onSelect, isOpen, onClose }: SidebarProps) {
+export function Sidebar({ selection, onSelect, isOpen, onClose, onlineUsers, onOpenSettings }: SidebarProps) {
   const { data: user } = useAuth();
   const { data: rooms, isLoading: roomsLoading } = useRooms();
   const { data: dms, isLoading: dmsLoading } = useDms();
@@ -208,9 +212,11 @@ export function Sidebar({ selection, onSelect, isOpen, onClose }: SidebarProps) 
             </div>
           ) : (
             <div className="space-y-1">
-              {dms.map((c) => {
+              {dms.map((c: any) => {
                 const active = selection?.type === "dm" && selection.userId === c.userId;
-                const isOnline = !!c.lastSeen && Date.now() - c.lastSeen < 60 * 1000;
+                const isOnline =
+                  onlineUsers?.has(c.userId) ||
+                  (!!c.lastSeen && Date.now() - c.lastSeen < 60 * 1000);
                 return (
                   <button
                     key={c.userId}
@@ -223,16 +229,11 @@ export function Sidebar({ selection, onSelect, isOpen, onClose }: SidebarProps) 
                     )}
                   >
                     <div className="relative shrink-0 mt-0.5">
-                      <div
-                        className={cn(
-                          "h-10 w-10 rounded-full flex items-center justify-center font-medium",
-                          active
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-secondary text-secondary-foreground",
-                        )}
-                      >
-                        {c.username.charAt(0).toUpperCase()}
-                      </div>
+                      <Avatar
+                        username={c.username}
+                        avatar={c.avatar ?? null}
+                        size="md"
+                      />
                       {isOnline && (
                         <span
                           className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-sidebar"
@@ -372,15 +373,13 @@ export function Sidebar({ selection, onSelect, isOpen, onClose }: SidebarProps) 
                   <div className="p-4 text-center text-sm text-muted-foreground">No users found.</div>
                 ) : (
                   <div className="divide-y divide-border/50">
-                    {searchResults.map((u) => (
+                    {searchResults.map((u: any) => (
                       <button
                         key={u.id}
                         onClick={() => startDm(u.id, u.username)}
                         className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-sidebar-accent/50 transition-colors"
                       >
-                        <div className="h-9 w-9 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center font-medium shrink-0">
-                          {u.username.charAt(0).toUpperCase()}
-                        </div>
+                        <Avatar username={u.username} avatar={u.avatar ?? null} size="sm" />
                         <span className="font-medium">{u.username}</span>
                       </button>
                     ))}
@@ -393,11 +392,18 @@ export function Sidebar({ selection, onSelect, isOpen, onClose }: SidebarProps) 
       </div>
 
       <div className="p-3 border-t border-border/50 shrink-0 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-3 overflow-hidden">
-          <div className="h-9 w-9 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center font-medium shrink-0">
-            {user?.username.charAt(0).toUpperCase()}
-          </div>
-          <div className="truncate">
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          className="flex items-center gap-3 overflow-hidden rounded-md hover:bg-sidebar-accent/50 px-1.5 py-1 -mx-1.5 -my-1 transition-colors flex-1 min-w-0"
+          aria-label="Open settings"
+        >
+          <Avatar
+            username={user?.username || "?"}
+            avatar={user?.avatar ?? null}
+            size="md"
+          />
+          <div className="truncate text-left flex-1 min-w-0">
             <span className="text-sm font-medium block truncate flex items-center gap-1.5">
               {user?.username}
               {user?.isAdmin && <ShieldCheck className="h-3.5 w-3.5 text-amber-500" />}
@@ -406,8 +412,24 @@ export function Sidebar({ selection, onSelect, isOpen, onClose }: SidebarProps) 
               {user?.isAdmin ? "Administrator" : "Secure connection"}
             </span>
           </div>
-        </div>
+        </button>
         <div className="flex items-center gap-1 shrink-0">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onOpenSettings}
+                className="text-muted-foreground hover:text-foreground"
+                aria-label="Settings"
+              >
+                <SettingsIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Settings</p>
+            </TooltipContent>
+          </Tooltip>
           {user?.isAdmin && (
             <Tooltip>
               <TooltipTrigger asChild>

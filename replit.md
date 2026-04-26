@@ -28,6 +28,14 @@ VaultChat — a private, secure chat platform with accounts, multi-room chat, in
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
 - `pnpm --filter @workspace/vaultchat run dev` — run web client locally
 
+## Realtime, Profiles, Wallpapers, Voice
+
+- **WebSocket realtime**: `ws` server attached at `/api/realtime` (lib/realtime.ts), authenticated via the existing `vc.sid` session cookie through SqliteStore. Events broadcast: `presence:update`, `room:message:new|update|delete`, `dm:message:new|update|delete`, `user:profile`, and client→server `typing` (relayed to room members or DM peer with a 4s TTL). Existing 2s polling is retained as a safety net.
+- **Login lockout**: 5 failed logins in a sliding window triggers a 3-minute lockout (`lib/login-lockout.ts`); `/login` returns `429 { error, lockedUntil, retryAfterMs }` when locked, or `401 { error, attemptsLeft }` while still under the threshold. The login page surfaces a live countdown that re-enables the form when it elapses.
+- **Profile pictures**: `users.avatar_kind` (`initials`|`preset`) and `users.avatar_value`. 16 emoji-gradient presets (`vaultchat/src/lib/avatars.ts`) plus an initials option. Settings dialog → Profile tab; saved via `PATCH /api/users/me`.
+- **Wallpapers**: 15 presets stored in `vaultchat/public/wallpapers/`, registered in `vaultchat/src/lib/wallpapers.ts`. Saved per-user via `users.wallpaper_id`. Applied as `bg-cover bg-center` on the chat `<main>` with a tinted overlay for legibility, sized fluidly for both portrait phones and landscape desktops. Selectable from Settings dialog → Wallpaper tab; "None" clears it.
+- **Voice notes**: `MediaRecorder` (audio/webm;opus) capped at 5 minutes with a live RMS level meter (`vaultchat/src/components/chat/voice-recorder.tsx`). Sent through the existing message file-upload route; the existing `FileViewer` plays them back as audio.
+
 ## API
 
 See `artifacts/vaultchat/API.md` for the full HTTP contract. Register requires `{ username, password, acceptedTerms: true }`.

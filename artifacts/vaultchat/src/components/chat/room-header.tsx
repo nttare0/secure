@@ -10,9 +10,10 @@ interface RoomHeaderProps {
   room: Room;
   onClearSelection: () => void;
   menuSlot?: React.ReactNode;
+  typingLabel?: string | null;
 }
 
-export function RoomHeader({ room, onClearSelection, menuSlot }: RoomHeaderProps) {
+export function RoomHeader({ room, onClearSelection, menuSlot, typingLabel }: RoomHeaderProps) {
   const [copied, setCopied] = useState(false);
   const { data: members } = useRoomMembers(room.id);
   const leaveRoom = useLeaveRoom();
@@ -58,10 +59,21 @@ export function RoomHeader({ room, onClearSelection, menuSlot }: RoomHeaderProps
         <div className="min-w-0">
           <h2 className="text-sm sm:text-base font-semibold text-foreground leading-tight truncate">{room.name}</h2>
           <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
-            <span className="flex items-center gap-1.5">
-              <Users className="h-3.5 w-3.5" />
-              {members?.length || room.memberCount} members
-            </span>
+            {typingLabel ? (
+              <span className="flex items-center gap-1.5 text-primary truncate max-w-[200px] sm:max-w-none">
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <span className="h-1.5 w-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: "120ms" }} />
+                  <span className="h-1.5 w-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: "240ms" }} />
+                </span>
+                <span className="truncate">{typingLabel}</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5" />
+                {members?.length || room.memberCount} members
+              </span>
+            )}
             <span className="hidden sm:flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
               <Shield className="h-3 w-3" /> Secure
             </span>

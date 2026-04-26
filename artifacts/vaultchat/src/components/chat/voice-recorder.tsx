@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 
 interface VoiceRecorderProps {
   onRecorded: (file: File) => void;
+  onRecordingChange?: (recording: boolean) => void;
   disabled?: boolean;
 }
 
@@ -17,7 +18,7 @@ function fmt(ms: number): string {
 
 const MAX_DURATION_MS = 5 * 60 * 1000; // 5 minutes
 
-export function VoiceRecorder({ onRecorded, disabled }: VoiceRecorderProps) {
+export function VoiceRecorder({ onRecorded, onRecordingChange, disabled }: VoiceRecorderProps) {
   const [recording, setRecording] = useState(false);
   const [requesting, setRequesting] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -72,6 +73,7 @@ export function VoiceRecorder({ onRecorded, disabled }: VoiceRecorderProps) {
         const totalMs = Date.now() - startedAt.current;
         cleanup();
         setRecording(false);
+        onRecordingChange?.(false);
         setElapsed(0);
         setLevel(0);
         if (wasCancelled) return;
@@ -94,6 +96,7 @@ export function VoiceRecorder({ onRecorded, disabled }: VoiceRecorderProps) {
       mr.start();
       startedAt.current = Date.now();
       setRecording(true);
+      onRecordingChange?.(true);
 
       // Audio level meter
       const ctx = new AudioContext();
@@ -147,6 +150,7 @@ export function VoiceRecorder({ onRecorded, disabled }: VoiceRecorderProps) {
     } else {
       cleanup();
       setRecording(false);
+      onRecordingChange?.(false);
       setElapsed(0);
     }
   };

@@ -106,6 +106,7 @@ router.get("/", requireAuth, (req, res) => {
   const rows = db
     .prepare(
       `SELECT u.id AS userId, u.username, u.last_seen_at AS lastSeen,
+              u.avatar_kind AS avatarKind, u.avatar_value AS avatarValue,
               (SELECT MAX(created_at) FROM dms
                 WHERE (sender_id = ? AND recipient_id = u.id)
                    OR (sender_id = u.id AND recipient_id = ?)) AS lastMessageAt,
@@ -122,8 +123,25 @@ router.get("/", requireAuth, (req, res) => {
          )
        ORDER BY lastMessageAt DESC`,
     )
-    .all(userId, userId, userId, userId, userId, userId, userId);
-  res.json(rows);
+    .all(userId, userId, userId, userId, userId, userId, userId) as Array<{
+      userId: number;
+      username: string;
+      lastSeen: number | null;
+      avatarKind: string;
+      avatarValue: string | null;
+      lastMessageAt: number | null;
+      lastMessage: string | null;
+    }>;
+  res.json(
+    rows.map((r) => ({
+      userId: r.userId,
+      username: r.username,
+      lastSeen: r.lastSeen,
+      avatar: { kind: r.avatarKind, value: r.avatarValue },
+      lastMessageAt: r.lastMessageAt,
+      lastMessage: r.lastMessage,
+    })),
+  );
 });
 
 router.get("/users/search", requireAuth, (req, res) => {
@@ -134,11 +152,26 @@ router.get("/users/search", requireAuth, (req, res) => {
   const safe = q.replace(/[%_\\]/g, (c) => "\\" + c);
   const rows = db
     .prepare(
-      `SELECT id, username, last_seen_at AS lastSeen FROM users
+      `SELECT id, username, last_seen_at AS lastSeen,
+              avatar_kind AS avatarKind, avatar_value AS avatarValue
+       FROM users
        WHERE id != ? AND username LIKE ? ESCAPE '\\' ORDER BY username LIMIT 10`,
     )
-    .all(userId, `%${safe}%`);
-  res.json(rows);
+    .all(userId, `%${safe}%`) as Array<{
+      id: number;
+      username: string;
+      lastSeen: number | null;
+      avatarKind: string;
+      avatarValue: string | null;
+    }>;
+  res.json(
+    rows.map((r) => ({
+      id: r.id,
+      username: r.username,
+      lastSeen: r.lastSeen,
+      avatar: { kind: r.avatarKind, value: r.avatarValue },
+    })),
+  );
 });
 
 router.get("/:userId/messages", requireAuth, (req, res) => {
@@ -146,9 +179,17 @@ router.get("/:userId/messages", requireAuth, (req, res) => {
   const otherId = parseId(req.params.userId);
   if (!otherId) return res.status(400).json({ error: "Invalid user id" });
   const other = db
-    .prepare("SELECT id, username, last_seen_at FROM users WHERE id = ?")
+    .prepare(
+      "SELECT id, username, last_seen_at, avatar_kind, avatar_value FROM users WHERE id = ?",
+    )
     .get(otherId) as
-    | { id: number; username: string; last_seen_at: number | null }
+    | {
+        id: number;
+        username: string;
+        last_seen_at: number | null;
+        avatar_kind: string;
+        avatar_value: string | null;
+      }
     | undefined;
   if (!other) return res.status(404).json({ error: "User not found" });
   const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
@@ -170,7 +211,12 @@ router.get("/:userId/messages", requireAuth, (req, res) => {
     )
     .all(...params) as DmRow[];
   res.json({
-    peer: { id: other.id, username: other.username, lastSeen: other.last_seen_at },
+    peer: {
+      id: other.id,
+      username: other.username,
+      lastSeen: other.last_seen_at,
+      avatar: { kind: other.avatar_kind, value: other.avatar_value },
+    },
     messages: rows.map(serialize),
   });
 });

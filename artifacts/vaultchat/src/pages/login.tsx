@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuth, useLogin, useRegister } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -13,8 +13,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Shield, Loader2, ArrowRight } from "lucide-react";
+import { Shield, Loader2, ArrowRight, Lock, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ApiError } from "@/lib/api";
+
+function fmtCountdown(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
@@ -22,6 +30,10 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const [attemptsLeft, setAttemptsLeft] = useState<number | null>(null);
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
@@ -34,8 +46,23 @@ export default function Login() {
     if (user) setLocation("/");
   }, [user, setLocation]);
 
+  useEffect(() => {
+    if (lockedUntil && lockedUntil > Date.now()) {
+      tickRef.current = setInterval(() => setNow(Date.now()), 250);
+      return () => {
+        if (tickRef.current) clearInterval(tickRef.current);
+        tickRef.current = null;
+      };
+    }
+    return undefined;
+  }, [lockedUntil]);
+
+  const isLocked = !!lockedUntil && lockedUntil > now;
+  const lockRemainingMs = isLocked ? lockedUntil! - now : 0;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLocked) return;
     if (!username || !password) {
       toast({
         title: "Validation Error",
@@ -53,14 +80,44 @@ export default function Login() {
       return;
     }
 
-    const onError = (error: any) => {
+    const onError = (error: unknown) => {
+      if (error instanceof ApiError) {
+        if (error.status === 429 && error.data?.lockedUntil) {
+          const until = Number(error.data.lockedUntil);
+          setLockedUntil(until);
+          setNow(Date.now());
+          setAttemptsLeft(null);
+          toast({
+            title: "Too many attempts",
+            description: "Account temporarily locked. Try again after the timer ends.",
+            variant: "destructive",
+          });
+          return;
+        }
+        if (error.status === 401 && typeof error.data?.attemptsLeft === "number") {
+          setAttemptsLeft(error.data.attemptsLeft);
+          toast({
+            title: "Login failed",
+            description: `${error.message} ${error.data.attemptsLeft} attempt${
+              error.data.attemptsLeft === 1 ? "" : "s"
+            } remaining before lockout.`,
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+      const msg = error instanceof Error ? error.message : "An unexpected error occurred.";
       toast({
         title: isLogin ? "Login Failed" : "Registration Failed",
-        description: error.message || "An unexpected error occurred.",
+        description: msg,
         variant: "destructive",
       });
     };
-    const onSuccess = () => setLocation("/");
+    const onSuccess = () => {
+      setLockedUntil(null);
+      setAttemptsLeft(null);
+      setLocation("/");
+    };
 
     if (isLogin) {
       login.mutate({ username, password, rememberMe }, { onSuccess, onError });
@@ -70,6 +127,7 @@ export default function Login() {
   };
 
   const isPending = login.isPending || register.isPending;
+  const submitDisabled = isPending || isLocked;
 
   if (authLoading) {
     return (
@@ -102,6 +160,29 @@ export default function Login() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {isLocked && (
+              <div className="mb-4 flex items-start gap-3 p-3 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300">
+                <Lock className="h-4 w-4 mt-0.5 shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Account temporarily locked</p>
+                  <p className="text-xs mt-0.5 opacity-90">
+                    Too many failed attempts. Try again in{" "}
+                    <span className="font-mono font-semibold tabular-nums">
+                      {fmtCountdown(lockRemainingMs)}
+                    </span>
+                    .
+                  </p>
+                </div>
+              </div>
+            )}
+            {!isLocked && attemptsLeft !== null && attemptsLeft <= 2 && isLogin && (
+              <div className="mb-4 flex items-start gap-3 p-3 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                <p className="text-xs">
+                  {attemptsLeft} attempt{attemptsLeft === 1 ? "" : "s"} remaining before a 3-minute lockout.
+                </p>
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="username">Username</Label>
@@ -110,7 +191,7 @@ export default function Login() {
                   placeholder="Enter your username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  disabled={isPending}
+                  disabled={submitDisabled}
                   autoComplete="username"
                   className="bg-background"
                 />
@@ -123,7 +204,7 @@ export default function Login() {
                   placeholder="Enter your password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  disabled={isPending}
+                  disabled={submitDisabled}
                   autoComplete={isLogin ? "current-password" : "new-password"}
                   className="bg-background"
                 />
@@ -135,7 +216,7 @@ export default function Login() {
                     id="remember"
                     checked={rememberMe}
                     onCheckedChange={(v) => setRememberMe(v === true)}
-                    disabled={isPending}
+                    disabled={submitDisabled}
                   />
                   <Label htmlFor="remember" className="text-sm font-normal cursor-pointer">
                     Remember me on this device
@@ -149,7 +230,7 @@ export default function Login() {
                     id="terms"
                     checked={acceptedTerms}
                     onCheckedChange={(v) => setAcceptedTerms(v === true)}
-                    disabled={isPending}
+                    disabled={submitDisabled}
                     className="mt-0.5"
                   />
                   <Label htmlFor="terms" className="text-sm font-normal leading-relaxed cursor-pointer">
@@ -162,13 +243,19 @@ export default function Login() {
                 </div>
               )}
 
-              <Button type="submit" className="w-full" disabled={isPending}>
+              <Button type="submit" className="w-full" disabled={submitDisabled}>
                 {isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : isLocked ? (
+                  <Lock className="mr-2 h-4 w-4" />
                 ) : (
                   <ArrowRight className="mr-2 h-4 w-4" />
                 )}
-                {isLogin ? "Sign In" : "Create Account"}
+                {isLocked
+                  ? `Locked · ${fmtCountdown(lockRemainingMs)}`
+                  : isLogin
+                    ? "Sign In"
+                    : "Create Account"}
               </Button>
             </form>
           </CardContent>
@@ -177,7 +264,10 @@ export default function Login() {
               {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
               <button
                 type="button"
-                onClick={() => setIsLogin(!isLogin)}
+                onClick={() => {
+                  setIsLogin(!isLogin);
+                  setAttemptsLeft(null);
+                }}
                 className="text-primary font-medium hover:underline focus:outline-none"
                 disabled={isPending}
               >
