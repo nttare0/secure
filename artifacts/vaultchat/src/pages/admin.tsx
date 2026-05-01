@@ -162,6 +162,75 @@ export default function Admin() {
 
 /* --------------------------------- OVERVIEW -------------------------------- */
 
+function StatCard({
+  label,
+  value,
+  icon,
+  sub,
+  highlight = false,
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  sub?: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "relative rounded-2xl border p-4 sm:p-5 flex flex-col gap-3 overflow-hidden transition-shadow hover:shadow-md",
+        highlight
+          ? "bg-primary text-primary-foreground border-primary/80"
+          : "bg-card text-card-foreground border-border/60",
+      )}
+    >
+      <div
+        className={cn(
+          "h-9 w-9 rounded-xl flex items-center justify-center text-sm",
+          highlight ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground",
+        )}
+      >
+        {icon}
+      </div>
+      <div>
+        <p
+          className={cn(
+            "text-3xl font-extrabold tabular-nums tracking-tight leading-none",
+            highlight ? "text-primary-foreground" : "text-foreground",
+          )}
+        >
+          {value.toLocaleString()}
+        </p>
+        <p
+          className={cn(
+            "text-xs font-medium mt-1",
+            highlight ? "text-primary-foreground/80" : "text-muted-foreground",
+          )}
+        >
+          {label}
+        </p>
+        {sub && (
+          <p
+            className={cn(
+              "text-[10px] mt-1",
+              highlight ? "text-primary-foreground/60" : "text-muted-foreground/70",
+            )}
+          >
+            {sub}
+          </p>
+        )}
+      </div>
+      <div
+        className={cn(
+          "pointer-events-none absolute -bottom-4 -right-4 h-16 w-16 rounded-full opacity-10",
+          highlight ? "bg-primary-foreground" : "bg-muted-foreground",
+        )}
+        aria-hidden
+      />
+    </div>
+  );
+}
+
 function OverviewPanel() {
   const { data: stats, isLoading } = useAdminStats();
 
@@ -173,101 +242,95 @@ function OverviewPanel() {
     );
   }
 
-  const cards: Array<{
-    label: string;
-    value: number;
-    icon: React.ReactNode;
-    accent: string;
-    sub?: string;
-  }> = [
-    {
-      label: "Users",
-      value: stats.userCount,
-      icon: <UsersIcon className="h-5 w-5" />,
-      accent: "from-sky-500/15 to-sky-500/5 text-sky-600 dark:text-sky-400 border-sky-500/20",
-      sub: `${stats.adminCount} admin · ${stats.disabledCount} disabled`,
-    },
-    {
-      label: "Online now",
-      value: stats.onlineUsers,
-      icon: <Circle className="h-5 w-5 fill-current" />,
-      accent:
-        "from-emerald-500/15 to-emerald-500/5 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-      sub: `${stats.activeRecently} active in last 5 min`,
-    },
-    {
-      label: "Rooms",
-      value: stats.roomCount,
-      icon: <Hash className="h-5 w-5" />,
-      accent:
-        "from-violet-500/15 to-violet-500/5 text-violet-600 dark:text-violet-400 border-violet-500/20",
-    },
-    {
-      label: "Messages",
-      value: stats.messageCount,
-      icon: <MessageSquare className="h-5 w-5" />,
-      accent:
-        "from-amber-500/15 to-amber-500/5 text-amber-600 dark:text-amber-400 border-amber-500/20",
-      sub: `${stats.roomMessages24h} in last 24 h`,
-    },
-    {
-      label: "Direct messages",
-      value: stats.dmCount,
-      icon: <MessageSquare className="h-5 w-5" />,
-      accent:
-        "from-pink-500/15 to-pink-500/5 text-pink-600 dark:text-pink-400 border-pink-500/20",
-      sub: `${stats.dms24h} in last 24 h`,
-    },
-    {
-      label: "Attachments",
-      value: stats.attachmentCount,
-      icon: <Paperclip className="h-5 w-5" />,
-      accent:
-        "from-indigo-500/15 to-indigo-500/5 text-indigo-600 dark:text-indigo-400 border-indigo-500/20",
-    },
-    {
-      label: "New users (24 h)",
-      value: stats.newUsers24h,
-      icon: <Activity className="h-5 w-5" />,
-      accent:
-        "from-teal-500/15 to-teal-500/5 text-teal-600 dark:text-teal-400 border-teal-500/20",
-    },
-    {
-      label: "Admins",
-      value: stats.adminCount,
-      icon: <Crown className="h-5 w-5" />,
-      accent:
-        "from-yellow-500/15 to-yellow-500/5 text-yellow-600 dark:text-yellow-400 border-yellow-500/20",
-    },
-  ];
+  const onlinePct = stats.userCount > 0 ? Math.round((stats.onlineUsers / stats.userCount) * 100) : 0;
 
   return (
-    <div className="p-4 sm:p-6 space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold mb-1">Workspace overview</h2>
-        <p className="text-sm text-muted-foreground">
-          Live snapshot of your VaultChat — refreshes automatically every 30 seconds.
-        </p>
+    <div className="p-4 sm:p-6 lg:p-8 space-y-8 max-w-5xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-0 justify-between">
+        <div>
+          <h2 className="text-xl font-bold tracking-tight">Workspace overview</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Live snapshot — refreshes every 30 s
+          </p>
+        </div>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 w-fit">
+          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+            {stats.onlineUsers} online now
+          </span>
+        </div>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-        {cards.map((c) => (
-          <div
-            key={c.label}
-            className={cn(
-              "rounded-xl border p-4 bg-gradient-to-br relative overflow-hidden",
-              c.accent,
-            )}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-medium uppercase tracking-wide opacity-80">
-                {c.label}
-              </span>
-              <span className="opacity-80">{c.icon}</span>
-            </div>
-            <p className="text-3xl font-bold tabular-nums">{c.value.toLocaleString()}</p>
-            {c.sub && <p className="text-[11px] mt-1 opacity-70">{c.sub}</p>}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <StatCard
+          label="Total users"
+          value={stats.userCount}
+          icon={<UsersIcon className="h-4 w-4" />}
+          sub={`${stats.adminCount} admin · ${stats.disabledCount} disabled`}
+          highlight
+        />
+        <StatCard
+          label="Rooms"
+          value={stats.roomCount}
+          icon={<Hash className="h-4 w-4" />}
+        />
+        <StatCard
+          label="New users (24 h)"
+          value={stats.newUsers24h}
+          icon={<Activity className="h-4 w-4" />}
+        />
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+          Messages &amp; content
+        </h3>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+          <StatCard
+            label="Room messages"
+            value={stats.messageCount}
+            icon={<MessageSquare className="h-4 w-4" />}
+            sub={`${stats.roomMessages24h} in 24 h`}
+          />
+          <StatCard
+            label="Direct messages"
+            value={stats.dmCount}
+            icon={<MessageSquare className="h-4 w-4" />}
+            sub={`${stats.dms24h} in 24 h`}
+          />
+          <StatCard
+            label="Attachments"
+            value={stats.attachmentCount}
+            icon={<Paperclip className="h-4 w-4" />}
+          />
+          <StatCard
+            label="Admins"
+            value={stats.adminCount}
+            icon={<Crown className="h-4 w-4" />}
+          />
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+          Activity
+        </h3>
+        <div className="rounded-2xl border border-border/60 bg-card p-4 sm:p-5 space-y-4">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground font-medium">Users online now</span>
+            <span className="font-bold tabular-nums">{stats.onlineUsers} / {stats.userCount}</span>
           </div>
-        ))}
+          <div className="h-2.5 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+              style={{ width: `${onlinePct}%` }}
+            />
+          </div>
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>{onlinePct}% of users online</span>
+            <span>{stats.activeRecently} active in last 5 min</span>
+          </div>
+        </div>
       </div>
     </div>
   );

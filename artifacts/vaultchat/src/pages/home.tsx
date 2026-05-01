@@ -42,6 +42,7 @@ export default function Home() {
   const callApi = useCall({
     enabled: !!user,
     myUserId: user?.id ?? null,
+    myUsername: user?.username ?? undefined,
     send,
     subscribe,
   });
@@ -165,6 +166,16 @@ export default function Home() {
               onClearSelection={handleClearSelection}
               menuSlot={MenuButton}
               typingLabel={roomTypingLabel}
+              callDisabled={
+                (callApi.call.status !== "idle" && callApi.call.status !== "ended") ||
+                !!callApi.groupCall
+              }
+              onAudioCall={() =>
+                callApi.startGroupCall(currentRoom.id, "audio")
+              }
+              onVideoCall={() =>
+                callApi.startGroupCall(currentRoom.id, "video")
+              }
             />
             {roomMessagesLoading ? (
               <div className="flex-1 flex items-center justify-center">
@@ -267,11 +278,19 @@ export default function Home() {
         remoteStream={callApi.remoteStream}
         muted={callApi.muted}
         cameraOff={callApi.cameraOff}
+        screenSharing={callApi.screenSharing}
         onAccept={callApi.accept}
         onDecline={callApi.decline}
         onHangUp={callApi.hangUp}
         onToggleMute={callApi.toggleMute}
         onToggleCamera={callApi.toggleCamera}
+        onToggleScreenShare={callApi.toggleScreenShare}
+        groupCall={callApi.groupCall}
+        groupInvite={callApi.groupInvite}
+        groupParticipants={callApi.groupParticipants}
+        onJoinGroup={() => callApi.groupInvite && callApi.joinGroupCall(callApi.groupInvite)}
+        onDeclineGroup={callApi.declineGroupInvite}
+        onLeaveGroup={callApi.leaveGroupCall}
       />
     </div>
   );

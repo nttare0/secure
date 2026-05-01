@@ -23,6 +23,9 @@ import {
   Play,
   Music,
   FileText,
+  Phone,
+  Video as VideoIcon,
+  Users,
 } from "lucide-react";
 import { API_BASE } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -245,6 +248,33 @@ function ReplyPreviewBlock({
   );
 }
 
+function CallEventBubble({ msg }: { msg: Message }) {
+  const ev = msg.callEvent;
+  if (!ev) return null;
+  const isGroup = ev.participants.length > 2;
+  const Icon = ev.kind === "video" ? VideoIcon : isGroup ? Users : Phone;
+  const durationLabel = ev.duration != null
+    ? (() => {
+        const m = Math.floor(ev.duration / 60);
+        const s = ev.duration % 60;
+        return m > 0 ? `${m}m ${s}s` : `${s}s`;
+      })()
+    : null;
+  return (
+    <div className="flex justify-center my-3">
+      <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/80 border border-border/50 text-xs text-muted-foreground max-w-xs">
+        <Icon className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+        <span className="truncate">
+          {isGroup ? "Group" : ""} {ev.kind} call
+          {ev.participants.length > 0 && !isGroup && ` with ${ev.participants.filter(p => p !== msg.username).join(", ")}`}
+          {durationLabel && <> · {durationLabel}</>}
+        </span>
+        <span className="text-muted-foreground/60 shrink-0">{format(new Date(msg.createdAt), "h:mm a")}</span>
+      </div>
+    </div>
+  );
+}
+
 export function MessageList({ messages, context, onReply }: MessageListProps) {
   const { data: user } = useAuth();
   const { toast } = useToast();
@@ -366,7 +396,9 @@ export function MessageList({ messages, context, onReply }: MessageListProps) {
                 </div>
               )}
 
-              <div
+              {msg.messageType === "call" && <CallEventBubble msg={msg} />}
+
+              {msg.messageType !== "call" && <div
                 className={cn(
                   "group/message flex items-start gap-2 max-w-[85%]",
                   isMe ? "ml-auto flex-row-reverse" : "mr-auto",
@@ -549,7 +581,7 @@ export function MessageList({ messages, context, onReply }: MessageListProps) {
                     </DropdownMenu>
                   </div>
                 )}
-              </div>
+              </div>}
             </div>
           );
         })}
