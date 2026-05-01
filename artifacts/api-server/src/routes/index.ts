@@ -8,6 +8,7 @@ import dmsRouter from "./dms";
 import adminRouter from "./admin";
 import forwardRouter from "./forward";
 import usersRouter from "./users";
+import callEventsRouter from "./call-events";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use("/dms", dmsRouter);
 router.use("/uploads", uploadsRouter);
 router.use("/admin", adminRouter);
 router.use("/messages", forwardRouter);
+router.use("/call-events", callEventsRouter);
 
 export default router;

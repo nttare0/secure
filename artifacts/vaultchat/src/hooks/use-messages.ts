@@ -15,6 +15,12 @@ export interface ReplyPreview {
   attachmentName: string | null;
 }
 
+export interface CallEvent {
+  kind: "audio" | "video";
+  duration: number | null;
+  participants: string[];
+}
+
 export interface Message {
   id: number;
   userId: number;
@@ -25,6 +31,8 @@ export interface Message {
   editedAt: number | null;
   forwardedFrom: string | null;
   replyTo: ReplyPreview | null;
+  messageType?: "message" | "call";
+  callEvent?: CallEvent | null;
 }
 
 export function useMessages(roomId?: number) {

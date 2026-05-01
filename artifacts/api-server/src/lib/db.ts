@@ -107,4 +107,16 @@ for (const table of ["messages", "dms"] as const) {
   if (!hasColumn(table, "forwarded_from_username")) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN forwarded_from_username TEXT;`);
   }
+  if (!hasColumn(table, "message_type")) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN message_type TEXT NOT NULL DEFAULT 'message';`);
+  }
+  if (!hasColumn(table, "call_kind")) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN call_kind TEXT;`);
+  }
+  if (!hasColumn(table, "call_duration")) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN call_duration INTEGER;`);
+  }
+  if (!hasColumn(table, "call_participants")) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN call_participants TEXT;`);
+  }
 }

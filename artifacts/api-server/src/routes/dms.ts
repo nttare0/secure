@@ -52,6 +52,10 @@ interface DmRow {
   reply_username: string | null;
   reply_content: string | null;
   reply_attachment_name: string | null;
+  message_type: string | null;
+  call_kind: string | null;
+  call_duration: number | null;
+  call_participants: string | null;
 }
 
 const SELECT_DM_COLS = `
@@ -61,7 +65,8 @@ const SELECT_DM_COLS = `
   d.edited_at, d.reply_to_id, d.forwarded_from_username,
   ru.username AS reply_username,
   rd.content AS reply_content,
-  rd.attachment_original_name AS reply_attachment_name
+  rd.attachment_original_name AS reply_attachment_name,
+  d.message_type, d.call_kind, d.call_duration, d.call_participants
 `;
 
 const FROM_DM_JOINS = `
@@ -96,6 +101,17 @@ function serialize(m: DmRow) {
           username: m.reply_username,
           content: m.reply_content,
           attachmentName: m.reply_attachment_name,
+        }
+      : null,
+    messageType: m.message_type ?? "message",
+    callEvent: m.message_type === "call"
+      ? {
+          kind: m.call_kind ?? "audio",
+          duration: m.call_duration ?? null,
+          participants: (() => {
+            if (!m.call_participants) return [];
+            try { const p = JSON.parse(m.call_participants); return Array.isArray(p) ? (p as string[]) : []; } catch { return []; }
+          })(),
         }
       : null,
   };

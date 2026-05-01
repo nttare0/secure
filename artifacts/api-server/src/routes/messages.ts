@@ -55,6 +55,10 @@ interface MessageRow {
   reply_username: string | null;
   reply_content: string | null;
   reply_attachment_name: string | null;
+  message_type: string | null;
+  call_kind: string | null;
+  call_duration: number | null;
+  call_participants: string | null;
 }
 
 const SELECT_MESSAGE_COLS = `
@@ -64,7 +68,8 @@ const SELECT_MESSAGE_COLS = `
   m.edited_at, m.reply_to_id, m.forwarded_from_username,
   ru.username AS reply_username,
   rm.content AS reply_content,
-  rm.attachment_original_name AS reply_attachment_name
+  rm.attachment_original_name AS reply_attachment_name,
+  m.message_type, m.call_kind, m.call_duration, m.call_participants
 `;
 
 const FROM_MESSAGE_JOINS = `
@@ -73,6 +78,11 @@ const FROM_MESSAGE_JOINS = `
   LEFT JOIN messages rm ON rm.id = m.reply_to_id
   LEFT JOIN users ru ON ru.id = rm.user_id
 `;
+
+function tryParseArr(s: string | null): string[] {
+  if (!s) return [];
+  try { const p = JSON.parse(s); return Array.isArray(p) ? (p as string[]) : []; } catch { return []; }
+}
 
 function serialize(m: MessageRow) {
   return {
@@ -98,6 +108,10 @@ function serialize(m: MessageRow) {
           content: m.reply_content,
           attachmentName: m.reply_attachment_name,
         }
+      : null,
+    messageType: m.message_type ?? "message",
+    callEvent: m.message_type === "call"
+      ? { kind: m.call_kind ?? "audio", duration: m.call_duration ?? null, participants: tryParseArr(m.call_participants) }
       : null,
   };
 }

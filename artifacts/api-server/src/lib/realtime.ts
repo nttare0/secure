@@ -17,6 +17,8 @@ const sockets = new Map<number, Set<AuthedSocket>>();
 let wss: WebSocketServer | null = null;
 let store: SqliteStore | null = null;
 
+const groupCalls = new Map<string, Map<number, string>>();
+
 const HEARTBEAT_MS = 30_000;
 
 export interface RealtimeEvent {
@@ -234,7 +236,88 @@ function handleClientMessage(s: AuthedSocket, evt: RealtimeEvent): void {
     return;
   }
 
-  // WebRTC call signaling — relay any `call:*` event to the named recipient,
+  if (typeof evt.type === "string" && evt.type.startsWith("call:group:")) {
+    const callId = String((evt as Record<string, unknown>).callId ?? "");
+    if (!callId) return;
+    const at = Date.now();
+
+    if (evt.type === "call:group:start") {
+      const roomId = Number((evt as Record<string, unknown>).roomId);
+      if (!Number.isFinite(roomId) || roomId <= 0) return;
+      const memberIds = getRoomMemberIds(roomId).filter((id) => id !== s.userId);
+      const participants = new Map<number, string>();
+      participants.set(s.userId, s.username);
+      groupCalls.set(callId, participants);
+      const kind = (evt as Record<string, unknown>).kind ?? "audio";
+      emitToUsers(memberIds, {
+        type: "call:group:invite",
+        callId,
+        roomId,
+        kind,
+        from: s.userId,
+        fromUsername: s.username,
+        at,
+      });
+      return;
+    }
+
+    if (evt.type === "call:group:join") {
+      const roomId = Number((evt as Record<string, unknown>).roomId);
+      let participants = groupCalls.get(callId);
+      if (!participants) {
+        participants = new Map();
+        groupCalls.set(callId, participants);
+      }
+      const existingIds = Array.from(participants.keys());
+      participants.set(s.userId, s.username);
+      emitToUsers(existingIds, {
+        type: "call:group:peer:join",
+        callId,
+        roomId,
+        peerId: s.userId,
+        peerUsername: s.username,
+        at,
+      });
+      const currentParticipants = Array.from(participants.entries())
+        .filter(([id]) => id !== s.userId)
+        .map(([id, username]) => ({ userId: id, username }));
+      emitToUser(s.userId, {
+        type: "call:group:current",
+        callId,
+        participants: currentParticipants,
+        at,
+      });
+      return;
+    }
+
+    if (evt.type === "call:group:offer" || evt.type === "call:group:answer" || evt.type === "call:group:ice") {
+      const to = Number((evt as Record<string, unknown>).to);
+      if (!Number.isFinite(to) || to === s.userId) return;
+      const { to: _omit, ...rest } = evt as Record<string, unknown>;
+      emitToUser(to, { ...rest, type: evt.type, callId, from: s.userId, fromUsername: s.username, at });
+      return;
+    }
+
+    if (evt.type === "call:group:leave" || evt.type === "call:group:reject") {
+      const participants = groupCalls.get(callId);
+      if (participants) {
+        participants.delete(s.userId);
+        if (participants.size === 0) groupCalls.delete(callId);
+        const remaining = Array.from(participants.keys());
+        emitToUsers(remaining, {
+          type: "call:group:peer:left",
+          callId,
+          peerId: s.userId,
+          peerUsername: s.username,
+          at,
+        });
+      }
+      return;
+    }
+    return;
+  }
+
+  // 1:1 WebRTC call signaling — relay any `call:*` event to the named recipient,
   // stamped with the sender's id and username so the client can verify identity.
   if (typeof evt.type === "string" && evt.type.startsWith("call:")) {
     const to = Number((evt as { to?: unknown }).to);

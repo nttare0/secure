@@ -2,7 +2,7 @@ import { Room, useDeleteRoom, useLeaveRoom, useRoomMembers } from "@/hooks/use-r
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Shield, Copy, Check, Users, MoreVertical, LogOut, Trash2, Hash } from "lucide-react";
+import { Shield, Copy, Check, Users, MoreVertical, LogOut, Trash2, Hash, Phone, Video as VideoIcon } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -11,9 +11,12 @@ interface RoomHeaderProps {
   onClearSelection: () => void;
   menuSlot?: React.ReactNode;
   typingLabel?: string | null;
+  callDisabled?: boolean;
+  onAudioCall?: () => void;
+  onVideoCall?: () => void;
 }
 
-export function RoomHeader({ room, onClearSelection, menuSlot, typingLabel }: RoomHeaderProps) {
+export function RoomHeader({ room, onClearSelection, menuSlot, typingLabel, callDisabled, onAudioCall, onVideoCall }: RoomHeaderProps) {
   const [copied, setCopied] = useState(false);
   const { data: members } = useRoomMembers(room.id);
   const leaveRoom = useLeaveRoom();
@@ -82,6 +85,40 @@ export function RoomHeader({ room, onClearSelection, menuSlot, typingLabel }: Ro
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        {onAudioCall && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 text-muted-foreground hover:text-emerald-500"
+                onClick={onAudioCall}
+                disabled={callDisabled}
+                aria-label="Start audio call"
+              >
+                <Phone className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent><p>Audio call</p></TooltipContent>
+          </Tooltip>
+        )}
+        {onVideoCall && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 text-muted-foreground hover:text-blue-500"
+                onClick={onVideoCall}
+                disabled={callDisabled}
+                aria-label="Start video call"
+              >
+                <VideoIcon className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent><p>Video call</p></TooltipContent>
+          </Tooltip>
+        )}
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
