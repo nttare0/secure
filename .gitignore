@@ -47,3 +47,5 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Trigger rebuild with TypeScript fixes applied
