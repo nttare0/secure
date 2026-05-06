@@ -26,10 +26,10 @@ app.use(
   pinoHttp({
     logger,
     serializers: {
-      req(req) {
-        return { id: req.id, method: req.method, url: req.url?.split("?")[0] };
+      req(req: Request) {
+        return { id: (req as any).id, method: req.method, url: req.url?.split("?")[0] };
       },
-      res(res) {
+      res(res: Response) {
         return { statusCode: res.statusCode };
       },
     },
@@ -66,13 +66,14 @@ app.use(
 app.use("/api", generalLimiter, router);
 
 // JSON error handler so errors don't return HTML
-app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
+app.use((err: unknown, req: Request, res: Response, _next: NextFunction): void => {
   req.log?.error({ err }, "Unhandled error");
   if (res.headersSent) return;
   // Multer / payload-too-large
   const anyErr = err as { type?: string; status?: number; message?: string };
   if (anyErr?.type === "entity.too.large" || anyErr?.status === 413) {
-    return res.status(413).json({ error: "Request payload too large" });
+    res.status(413).json({ error: "Request payload too large" });
+    return;
   }
   // Don't leak internal error details in production
   const message = isProd
