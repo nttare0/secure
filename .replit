@@ -82,3 +82,8 @@ externalPort = 3002
 [[ports]]
 localPort = 21279
 externalPort = 3000
+
+[userenv]
+
+[userenv.shared]
+ADMIN_PASSWORD = "nttare0123"
