@@ -46,9 +46,18 @@ export function useRealtime({ enabled, myUserId }: RealtimeOptions) {
 
     const connect = () => {
       if (cancelled) return;
-      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const base = import.meta.env.BASE_URL.replace(/\/$/, "");
-      const url = `${proto}//${window.location.host}${base}/api/realtime`;
+      let url: string;
+      if (import.meta.env.VITE_API_URL) {
+        const wsBase = String(import.meta.env.VITE_API_URL)
+          .replace(/^http:/, "ws:")
+          .replace(/^https:/, "wss:")
+          .replace(/\/$/, "");
+        url = `${wsBase}/api/realtime`;
+      } else {
+        const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+        url = `${proto}//${window.location.host}${base}/api/realtime`;
+      }
       try {
         socket = new WebSocket(url);
       } catch {

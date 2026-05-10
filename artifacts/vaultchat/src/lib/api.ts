@@ -1,4 +1,12 @@
-export const API_BASE = import.meta.env.BASE_URL.replace(/\/$/, '') + '/api';
+// In production, set VITE_API_URL to your backend origin (e.g. https://api.yourdomain.com)
+// In development the Vite proxy handles /api → localhost:8000
+const apiOrigin = import.meta.env.VITE_API_URL
+  ? String(import.meta.env.VITE_API_URL).replace(/\/$/, "")
+  : "";
+
+export const API_BASE = apiOrigin
+  ? `${apiOrigin}/api`
+  : `${import.meta.env.BASE_URL.replace(/\/$/, "")}/api`;
 
 export class ApiError extends Error {
   status: number;
