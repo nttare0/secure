@@ -39,6 +39,14 @@ VaultChat — a private, secure chat platform with accounts, multi-room chat, in
 - **Admin console**: Rebuilt `/admin` with three tabs — Overview (live workspace stats card grid auto-refreshing every 30s, GET `/api/admin/stats`), Users (search + filter chips for All/Online/Admins/Disabled, per-user actions: disable/enable, promote/demote with last-admin protection, reset password via dialog using `/api/admin/users/:id/reset-password`, delete account, plus the existing message/DM moderation), and Rooms (table view with member/message counts, owner, last activity; delete via `/api/admin/rooms/:id`). User list/detail render real avatars with online dots.
 - **Voice notes**: `MediaRecorder` (audio/webm;opus) capped at 5 minutes with a live RMS level meter (`vaultchat/src/components/chat/voice-recorder.tsx`). Sent through the existing message file-upload route; the existing `FileViewer` plays them back as audio.
 
+## AI Chat (VaultBot)
+
+- **Sidebar entry**: "VaultBot AI" button with a sparkle icon appears above the action buttons in the sidebar for all logged-in users.
+- **Frontend**: `vaultchat/src/components/chat/ai-chat.tsx` — self-contained chat UI with local message state (conversations not persisted to DB), typing indicator, suggestion chips, and a clear-conversation button.
+- **Backend**: `POST /api/ai/chat` (`api-server/src/routes/ai.ts`) — requires auth, accepts `{ message, history[] }`, calls Google Gemini (`gemini-2.5-flash`), returns `{ reply }`.
+- **API key**: `AIzaSyCd7PUj7hlwwyQ9ggv1y9I9lq2hYirKfqQ` embedded in `ai.ts` (can be overridden via `GEMINI_API_KEY` env var).
+- **Rate limiting**: Uses the existing `writeLimiter` (30 req/min per user).
+
 ## API
 
 See `artifacts/vaultchat/API.md` for the full HTTP contract. Register requires `{ username, password, acceptedTerms: true }`.

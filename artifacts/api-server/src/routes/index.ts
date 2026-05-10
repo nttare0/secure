@@ -9,6 +9,7 @@ import adminRouter from "./admin";
 import forwardRouter from "./forward";
 import usersRouter from "./users";
 import callEventsRouter from "./call-events";
+import aiRouter from "./ai";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use("/uploads", uploadsRouter);
 router.use("/admin", adminRouter);
 router.use("/messages", forwardRouter);
 router.use("/call-events", callEventsRouter);
+router.use("/ai", aiRouter);
 
 export default router;

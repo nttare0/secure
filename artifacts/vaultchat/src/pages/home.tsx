@@ -9,6 +9,7 @@ import { MessageList } from "@/components/chat/message-list";
 import { Composer } from "@/components/chat/composer";
 import { RoomHeader } from "@/components/chat/room-header";
 import { DmHeader } from "@/components/chat/dm-header";
+import { AiChat } from "@/components/chat/ai-chat";
 import { Button } from "@/components/ui/button";
 import { Shield, Loader2, Menu } from "lucide-react";
 import type { Selection } from "@/lib/selection";
@@ -71,6 +72,7 @@ export default function Home() {
     setSidebarOpen(true);
   };
 
+  const isAiChat = selection?.type === "ai";
   const currentRoomId = selection?.type === "room" ? selection.id : undefined;
   const currentDmUserId = selection?.type === "dm" ? selection.userId : undefined;
   const currentRoom = rooms?.find((r) => r.id === currentRoomId);
@@ -159,7 +161,9 @@ export default function Home() {
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-background/30 via-background/20 to-background/40 dark:from-background/40 dark:via-background/30 dark:to-background/55" aria-hidden />
         )}
         <div className="relative flex-1 flex flex-col min-h-0">
-        {currentRoom ? (
+        {isAiChat ? (
+          <AiChat />
+        ) : currentRoom ? (
           <>
             <RoomHeader
               room={currentRoom}

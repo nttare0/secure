@@ -32,6 +32,7 @@ import {
   Settings as SettingsIcon,
   Users as UsersIcon,
   Circle,
+  Sparkles,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
@@ -286,6 +287,31 @@ export function Sidebar({ selection, onSelect, isOpen, onClose, onlineUsers, onO
           )}
         </TabsContent>
       </Tabs>
+
+      <div className="px-3 py-2 border-t border-border/50 shrink-0">
+        <button
+          onClick={() => { onSelect({ type: "ai" }); onClose?.(); }}
+          className={cn(
+            "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors",
+            selection?.type === "ai"
+              ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+              : "hover:bg-sidebar-accent/50 text-sidebar-foreground/80 hover:text-sidebar-foreground",
+          )}
+        >
+          <div className={cn(
+            "h-9 w-9 rounded-full flex items-center justify-center shrink-0",
+            selection?.type === "ai"
+              ? "bg-gradient-to-br from-violet-500 to-indigo-600 text-white"
+              : "bg-gradient-to-br from-violet-500/20 to-indigo-600/20 text-violet-500",
+          )}>
+            <Sparkles className="h-4 w-4" />
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <span className="truncate block text-sm font-medium">VaultBot AI</span>
+            <span className="text-xs text-sidebar-foreground/50 truncate block">Your AI assistant</span>
+          </div>
+        </button>
+      </div>
 
       <div className="p-3 border-t border-border/50 bg-sidebar-accent/20 shrink-0 space-y-2">
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
