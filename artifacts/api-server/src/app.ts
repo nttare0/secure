@@ -2,6 +2,8 @@ import express, { type Express, type Request, type Response, type NextFunction }
 import cors from "cors";
 import pinoHttp from "pino-http";
 import session from "express-session";
+import path from "node:path";
+import fs from "node:fs";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { SqliteStore } from "./lib/session-store";
@@ -64,6 +66,19 @@ app.use(
 );
 
 app.use("/api", generalLimiter, router);
+
+// Serve the built React frontend (self-contained: one server for everything)
+const clientDist = path.resolve(import.meta.dirname, "..", "..", "vaultchat", "dist", "public");
+if (fs.existsSync(clientDist)) {
+  app.use(express.static(clientDist, { maxAge: "1d", index: false }));
+  // For any non-API route, serve the SPA index.html (client-side routing)
+  app.get(/.*/, (_req, res) => {
+    res.sendFile(path.join(clientDist, "index.html"));
+  });
+  logger.info({ clientDist }, "Serving bundled frontend");
+} else {
+  logger.warn({ clientDist }, "No built frontend found — run: pnpm --filter @workspace/vaultchat run build");
+}
 
 // JSON error handler so errors don't return HTML
 app.use((err: unknown, req: Request, res: Response, _next: NextFunction): void => {
